@@ -34,6 +34,13 @@ async def test_answer_has_citations_from_retrieval():
     assert a.grounded and a.citations[0].source == "politica.md"
 
 
+async def test_demo_model_answers_with_the_retrieved_text():
+    _, _, _, index, ask = _stack()
+    index(Document("pol", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
+    a = await ask("qual o prazo de reembolso?")
+    assert a.text == "O prazo de reembolso é de sete dias corridos."
+
+
 async def test_refuses_instead_of_inventing_when_nothing_relevant():
     _, _, _, index, ask = _stack()
     index(Document("d1", "O prazo de reembolso é de sete dias.", "politica.md"))
@@ -61,5 +68,6 @@ def test_api_flow_metrics_and_request_id():
     )
     r = client.post("/ask", json={"question": "reembolso"}, headers={"x-request-id": "abc"})
     assert r.json()["grounded"] is True and r.headers["x-request-id"] == "abc"
+    assert r.json()["answer"] == "reembolso em sete dias"
     assert client.post("/ask", json={"question": ""}).status_code == 422
     assert 'http_requests_total{path="/ask",status="200"} 1.0' in client.get("/metrics").text

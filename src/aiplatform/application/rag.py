@@ -17,6 +17,8 @@ from aiplatform.application.ports import (
 )
 from aiplatform.domain.models import AgentMessage, Answer, Chunk, Citation, Document
 
+CONTEXT_HEADER = "CONTEXTO:"
+QUESTION_HEADER = "PERGUNTA:"
 NO_CONTEXT_REPLY = "Não encontrei isso nos documentos indexados."
 
 
@@ -89,7 +91,9 @@ class AnswerQuestion:
                 role="system",
                 content="Responda só com base no CONTEXTO. Se não estiver nele, diga que não sabe.",
             ),
-            AgentMessage(role="user", content=f"CONTEXTO:\n{context}\n\nPERGUNTA: {question}"),
+            AgentMessage(
+                role="user", content=f"{CONTEXT_HEADER}\n{context}\n\n{QUESTION_HEADER} {question}"
+            ),
         ]
         reply = await self._model.complete(messages, [])
         citations = tuple(Citation(h.chunk.id, h.chunk.source, round(h.score, 4)) for h in hits)

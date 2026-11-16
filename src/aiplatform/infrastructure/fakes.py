@@ -1,9 +1,11 @@
 """Modelo de chat roteirizado: respostas pré-definidas, para testes e demo."""
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
 from aiplatform.application.ports import BudgetPort, ChatModelPort
+from aiplatform.application.rag import CONTEXT_HEADER, QUESTION_HEADER
 from aiplatform.domain.models import AgentMessage, ToolSpec
 
 
@@ -26,8 +28,10 @@ class EchoContextModel(ChatModelPort):
         self, messages: Sequence[AgentMessage], tools: Sequence[ToolSpec]
     ) -> AgentMessage:
         body = messages[-1].content
-        first = body.split("\n\n")[1] if "\n\n" in body else body
-        return AgentMessage("assistant", first)
+        context = body.split("\n\n" + QUESTION_HEADER, 1)[0].removeprefix(CONTEXT_HEADER + "\n")
+        # chunk_text normaliza espaços: nenhum trecho contém "\n\n".
+        first = context.split("\n\n", 1)[0]
+        return AgentMessage("assistant", re.sub(r"^\[[^\]]*\] ", "", first))
 
 
 class TokenBudget(BudgetPort):
