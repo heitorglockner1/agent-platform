@@ -7,6 +7,7 @@ from typing import Literal, TypeVar, cast, get_args
 
 LlmKind = Literal["demo", "openai"]
 VectorStoreKind = Literal["memory", "chroma"]
+EmbeddingsKind = Literal["hashing", "openai"]
 
 _N = TypeVar("_N", int, float)
 
@@ -35,11 +36,14 @@ class Settings:
     llm_timeout_s: float = 30.0
     vector_store: VectorStoreKind = "memory"
     chroma_path: str | None = None
+    embeddings: EmbeddingsKind = "hashing"
+    embedding_model: str = "text-embedding-3-small"
     rag_top_k: int = 4
     rag_min_score: float = 0.2
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Settings":
+        emb = _choice(environ, "EMBEDDINGS", get_args(EmbeddingsKind), cls.embeddings)
         store = _choice(environ, "VECTOR_STORE", get_args(VectorStoreKind), cls.vector_store)
         return cls(
             llm="openai" if environ.get("OPENAI_API_KEY") else "demo",
@@ -47,6 +51,8 @@ class Settings:
             llm_timeout_s=_number(environ, "LLM_TIMEOUT_S", float, cls.llm_timeout_s),
             vector_store=cast(VectorStoreKind, store),
             chroma_path=environ.get("CHROMA_PATH") or None,
+            embeddings=cast(EmbeddingsKind, emb),
+            embedding_model=environ.get("EMBEDDING_MODEL", cls.embedding_model),
             rag_top_k=_number(environ, "RAG_TOP_K", int, cls.rag_top_k),
             rag_min_score=_number(environ, "RAG_MIN_SCORE", float, cls.rag_min_score),
         )

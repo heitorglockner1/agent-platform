@@ -22,15 +22,23 @@ def test_settings_read_every_variable():
             "LLM_TIMEOUT_S": "5",
             "VECTOR_STORE": "chroma",
             "CHROMA_PATH": "/data",
+            "EMBEDDINGS": "openai",
+            "EMBEDDING_MODEL": "emb-x",
             "RAG_TOP_K": "8",
             "RAG_MIN_SCORE": "0.5",
         }
     )
-    assert s == Settings("openai", "gpt-x", 5.0, "chroma", "/data", 8, 0.5)
+    assert s == Settings("openai", "gpt-x", 5.0, "chroma", "/data", "openai", "emb-x", 8, 0.5)
 
 
 @pytest.mark.parametrize(
-    "env", [{"VECTOR_STORE": "xyz"}, {"RAG_TOP_K": "muitos"}, {"RAG_MIN_SCORE": "alto"}]
+    "env",
+    [
+        {"EMBEDDINGS": "bert"},
+        {"VECTOR_STORE": "xyz"},
+        {"RAG_TOP_K": "muitos"},
+        {"RAG_MIN_SCORE": "alto"},
+    ],
 )
 def test_invalid_settings_name_the_variable(env):
     [name] = env
@@ -60,7 +68,8 @@ def test_chroma_composition():
 def test_openai_composition(monkeypatch):
     pytest.importorskip("langchain_openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-teste")
-    assert TestClient(build_app(Settings(llm="openai"))).get("/health").status_code == 200
+    settings = Settings(llm="openai", embeddings="openai")
+    assert TestClient(build_app(settings)).get("/health").status_code == 200
 
 
 def test_missing_extra_says_what_to_install(monkeypatch):

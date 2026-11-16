@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from aiplatform.application.ports import ChatModelPort, VectorStorePort
+from aiplatform.application.ports import ChatModelPort, EmbedderPort, VectorStorePort
 from aiplatform.infrastructure.demo import EchoContextModel
 from aiplatform.infrastructure.local import HashingEmbedder, InMemoryEventBus, InMemoryVectorStore
 from aiplatform.observability import configure_logging
@@ -38,10 +38,23 @@ def _model(settings: Settings) -> ChatModelPort:
     return EchoContextModel()
 
 
+def _embedder(settings: Settings) -> EmbedderPort:
+    # Escolha explícita: ter a chave da OpenAI não troca o embedder sozinho.
+    if settings.embeddings == "openai":
+        try:
+            from langchain_openai import OpenAIEmbeddings
+
+            from aiplatform.infrastructure.langchain_embeddings import LangChainEmbedder
+        except ImportError as exc:
+            raise _missing_extra("EMBEDDINGS=openai", "langchain") from exc
+        return LangChainEmbedder(OpenAIEmbeddings(model=settings.embedding_model))
+    return HashingEmbedder()
+
+
 def build_app(settings: Settings) -> FastAPI:
     return create_app(
         _model(settings),
-        HashingEmbedder(),
+        _embedder(settings),
         _store(settings),
         InMemoryEventBus(),
         top_k=settings.rag_top_k,
