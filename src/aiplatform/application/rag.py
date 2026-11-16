@@ -81,7 +81,7 @@ class AnswerQuestion:
         hits = self._store.search(self._embedder.embed([question])[0], self._top_k)
         hits = [h for h in hits if h.score >= self._min_score]
         if not hits:
-            return Answer(NO_CONTEXT_REPLY, [], grounded=False)
+            return Answer(NO_CONTEXT_REPLY, (), grounded=False)
 
         context = "\n\n".join(f"[{h.chunk.id}] {h.chunk.text}" for h in hits)
         messages: Sequence[AgentMessage] = [
@@ -92,5 +92,5 @@ class AnswerQuestion:
             AgentMessage(role="user", content=f"CONTEXTO:\n{context}\n\nPERGUNTA: {question}"),
         ]
         reply = await self._model.complete(messages, [])
-        citations = [Citation(h.chunk.id, h.chunk.source, round(h.score, 4)) for h in hits]
+        citations = tuple(Citation(h.chunk.id, h.chunk.source, round(h.score, 4)) for h in hits)
         return Answer(reply.content, citations, grounded=True)

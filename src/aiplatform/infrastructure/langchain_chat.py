@@ -7,16 +7,20 @@ O loop do agente continua nosso: o LangChain entra só como camada de provedor.
 
 import json
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aiplatform.application.ports import ChatModelPort
 from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec
 
+if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
+    from langchain_core.messages import BaseMessage
 
-def _to_lc(messages: Sequence[AgentMessage]) -> list[Any]:
+
+def _to_lc(messages: Sequence[AgentMessage]) -> list["BaseMessage"]:
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-    out: list[Any] = []
+    out: list[BaseMessage] = []
     for m in messages:
         if m.role == "system":
             out.append(SystemMessage(content=m.content))
@@ -42,7 +46,7 @@ def _tool_schema(spec: ToolSpec) -> dict[str, Any]:
 
 
 class LangChainChatModel(ChatModelPort):
-    def __init__(self, chat_model: Any) -> None:
+    def __init__(self, chat_model: "BaseChatModel") -> None:
         self._chat = chat_model
 
     async def complete(

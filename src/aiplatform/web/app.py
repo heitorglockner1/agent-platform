@@ -5,6 +5,7 @@ import logging
 import time
 import uuid
 from contextvars import ContextVar
+from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from prometheus_client import (
@@ -15,6 +16,7 @@ from prometheus_client import (
     generate_latest,
 )
 from pydantic import BaseModel, Field
+from starlette.middleware.base import RequestResponseEndpoint
 
 from aiplatform.application.ports import (
     ChatModelPort,
@@ -66,7 +68,7 @@ def create_app(
     app = FastAPI(title="AI Agent Platform")
 
     @app.middleware("http")
-    async def observe(req: Request, call_next):
+    async def observe(req: Request, call_next: RequestResponseEndpoint) -> Response:
         token = request_id.set(req.headers.get("x-request-id") or uuid.uuid4().hex[:12])
         started = time.perf_counter()
         resp = await call_next(req)
@@ -79,7 +81,7 @@ def create_app(
         return resp
 
     @app.get("/health")
-    def health() -> dict:
+    def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/metrics")
@@ -87,12 +89,12 @@ def create_app(
         return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
     @app.post("/documents", status_code=201)
-    def post_document(body: IndexRequest) -> dict:
+    def post_document(body: IndexRequest) -> dict[str, Any]:
         n = index_document(Document(body.id, body.text, body.source))
         return {"document_id": body.id, "chunks": n}
 
     @app.post("/ask")
-    async def ask(body: AskRequest) -> dict:
+    async def ask(body: AskRequest) -> dict[str, Any]:
         a = await answer_question(body.question)
         return {
             "answer": a.text,

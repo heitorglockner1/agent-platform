@@ -2,7 +2,11 @@
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+Role = Literal["system", "user", "assistant", "tool"]
+StopReason = Literal["concluded", "max_iterations", "budget"]
+ToolHandler = Callable[..., Awaitable[Any]]
 
 
 @dataclass(frozen=True)
@@ -40,7 +44,7 @@ class Citation:
 @dataclass(frozen=True)
 class Answer:
     text: str
-    citations: list[Citation]
+    citations: tuple[Citation, ...]
     grounded: bool  # False quando nada relevante foi recuperado
 
 
@@ -55,7 +59,7 @@ class ToolSpec:
     name: str
     description: str
     parameters: dict[str, Any]
-    handler: Callable[..., Awaitable[Any]]
+    handler: ToolHandler
 
 
 @dataclass(frozen=True)
@@ -67,7 +71,7 @@ class ToolCall:
 
 @dataclass
 class AgentMessage:
-    role: str  # system | user | assistant | tool
+    role: Role
     content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None
@@ -79,5 +83,5 @@ class AgentResult:
     final_text: str
     iterations: int
     tool_calls_executed: int
-    stopped_by: str  # concluded | max_iterations | budget
+    stopped_by: StopReason
     errors: list[str] = field(default_factory=list)

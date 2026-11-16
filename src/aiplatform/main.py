@@ -3,12 +3,13 @@
 import logging
 import os
 
+from aiplatform.application.ports import ChatModelPort, VectorStorePort
 from aiplatform.infrastructure.fakes import EchoContextModel
 from aiplatform.infrastructure.local import HashingEmbedder, InMemoryEventBus, InMemoryVectorStore
 from aiplatform.web.app import JsonFormatter, create_app
 
 
-def _store():
+def _store() -> VectorStorePort:
     if os.environ.get("VECTOR_STORE") == "chroma":
         from aiplatform.infrastructure.chroma_store import ChromaVectorStore
 
@@ -16,7 +17,7 @@ def _store():
     return InMemoryVectorStore()
 
 
-def _model():
+def _model() -> ChatModelPort:
     if os.environ.get("OPENAI_API_KEY"):
         from langchain_openai import ChatOpenAI
 

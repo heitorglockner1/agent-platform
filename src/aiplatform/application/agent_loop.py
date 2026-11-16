@@ -17,7 +17,7 @@ import time
 from collections.abc import Sequence
 
 from aiplatform.application.ports import BudgetPort, ChatModelPort, Tracer
-from aiplatform.domain.models import AgentMessage, AgentResult, ToolCall, ToolSpec
+from aiplatform.domain.models import AgentMessage, AgentResult, StopReason, ToolCall, ToolSpec
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -102,7 +102,11 @@ async def run_agent(
 
 
 def _finish(
-    history: list[AgentMessage], turns: int, executed: list[str], errors: list[str], reason: str
+    history: list[AgentMessage],
+    turns: int,
+    executed: list[str],
+    errors: list[str],
+    reason: StopReason,
 ) -> AgentResult:
     last = next((m.content for m in reversed(history) if m.role == "assistant" and m.content), "")
     return AgentResult(last + _footer(executed, errors), turns, len(executed), reason, errors)
