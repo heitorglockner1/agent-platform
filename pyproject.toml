@@ -40,9 +40,6 @@ module = ["chromadb", "chromadb.*", "langchain_openai", "langchain_openai.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 
-[tool.coverage.run]
-omit = ["*/chroma_store.py"]  # adaptador opcional
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
