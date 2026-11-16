@@ -1,10 +1,8 @@
 """API FastAPI: composição na `create_app`, rotas finas, observabilidade."""
 
-import json
 import logging
 import time
 import uuid
-from contextvars import ContextVar
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -26,17 +24,7 @@ from aiplatform.application.ports import (
 )
 from aiplatform.application.rag import AnswerQuestion, IndexDocument
 from aiplatform.domain.models import Document
-
-request_id: ContextVar[str] = ContextVar("request_id", default="-")
-
-
-class JsonFormatter(logging.Formatter):
-    """Log estruturado: uma linha JSON, sempre com o request_id."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        return json.dumps(
-            {"level": record.levelname, "msg": record.getMessage(), "request_id": request_id.get()}
-        )
+from aiplatform.observability import request_id
 
 
 class IndexRequest(BaseModel):
@@ -55,6 +43,9 @@ def create_app(
     store: VectorStorePort,
     events: EventPublisherPort,
     registry: CollectorRegistry | None = None,
+    *,
+    top_k: int = 4,
+    min_score: float = 0.2,
 ) -> FastAPI:
     registry = registry or CollectorRegistry()
     requests_total = Counter(
@@ -64,7 +55,7 @@ def create_app(
     log = logging.getLogger("aiplatform")
 
     index_document = IndexDocument(embedder, store, events)
-    answer_question = AnswerQuestion(model, embedder, store)
+    answer_question = AnswerQuestion(model, embedder, store, top_k=top_k, min_score=min_score)
     app = FastAPI(title="AI Agent Platform")
 
     @app.middleware("http")

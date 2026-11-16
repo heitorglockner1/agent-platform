@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from aiplatform.application.rag import NO_CONTEXT_REPLY, AnswerQuestion, IndexDocument, chunk_text
 from aiplatform.domain.models import Document
-from aiplatform.infrastructure.fakes import EchoContextModel
+from aiplatform.infrastructure.demo import EchoContextModel
 from aiplatform.infrastructure.local import HashingEmbedder, InMemoryEventBus, InMemoryVectorStore
 from aiplatform.web.app import create_app
 

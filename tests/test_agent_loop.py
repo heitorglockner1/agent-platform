@@ -1,6 +1,7 @@
 from aiplatform.application.agent_loop import NO_CONCLUSION_REPLY, run_agent
+from aiplatform.application.budget import TokenBudget
 from aiplatform.domain.models import AgentMessage, TokenUsage, ToolCall, ToolSpec
-from aiplatform.infrastructure.fakes import ScriptedChatModel, TokenBudget
+from tests.doubles import ScriptedChatModel
 
 
 def _call(name="lookup", args=None, id="1"):

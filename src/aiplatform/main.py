@@ -1,35 +1,52 @@
 """Entrypoint: `uvicorn aiplatform.main:app`. Sem chave, roda com adaptadores locais."""
 
-import logging
-import os
+from fastapi import FastAPI
 
 from aiplatform.application.ports import ChatModelPort, VectorStorePort
-from aiplatform.infrastructure.fakes import EchoContextModel
+from aiplatform.infrastructure.demo import EchoContextModel
 from aiplatform.infrastructure.local import HashingEmbedder, InMemoryEventBus, InMemoryVectorStore
-from aiplatform.web.app import JsonFormatter, create_app
+from aiplatform.observability import configure_logging
+from aiplatform.settings import Settings
+from aiplatform.web.app import create_app
 
 
-def _store() -> VectorStorePort:
-    if os.environ.get("VECTOR_STORE") == "chroma":
-        from aiplatform.infrastructure.chroma_store import ChromaVectorStore
+def _missing_extra(setting: str, extra: str) -> RuntimeError:
+    return RuntimeError(f'{setting} exige o extra {extra}: pip install ".[{extra}]"')
 
-        return ChromaVectorStore(path=os.environ.get("CHROMA_PATH"))
+
+def _store(settings: Settings) -> VectorStorePort:
+    if settings.vector_store == "chroma":
+        try:
+            from aiplatform.infrastructure.chroma_store import ChromaVectorStore
+
+            return ChromaVectorStore(path=settings.chroma_path)
+        except ImportError as exc:
+            raise _missing_extra("VECTOR_STORE=chroma", "chroma") from exc
     return InMemoryVectorStore()
 
 
-def _model() -> ChatModelPort:
-    if os.environ.get("OPENAI_API_KEY"):
-        from langchain_openai import ChatOpenAI
+def _model(settings: Settings) -> ChatModelPort:
+    if settings.llm == "openai":
+        try:
+            from langchain_openai import ChatOpenAI
 
-        from aiplatform.infrastructure.langchain_chat import LangChainChatModel
-
-        return LangChainChatModel(ChatOpenAI(model=os.environ.get("LLM_MODEL", "gpt-4o-mini")))
+            from aiplatform.infrastructure.langchain_chat import LangChainChatModel
+        except ImportError as exc:
+            raise _missing_extra("OPENAI_API_KEY", "langchain") from exc
+        return LangChainChatModel(ChatOpenAI(model=settings.llm_model))
     return EchoContextModel()
 
 
-handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
-logging.getLogger("aiplatform").addHandler(handler)
-logging.getLogger("aiplatform").setLevel(logging.INFO)
+def build_app(settings: Settings) -> FastAPI:
+    return create_app(
+        _model(settings),
+        HashingEmbedder(),
+        _store(settings),
+        InMemoryEventBus(),
+        top_k=settings.rag_top_k,
+        min_score=settings.rag_min_score,
+    )
 
-app = create_app(_model(), HashingEmbedder(), _store(), InMemoryEventBus())
+
+configure_logging()
+app = build_app(Settings.from_env())
