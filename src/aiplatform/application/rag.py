@@ -4,7 +4,9 @@ Decisões:
 * `min_score`: abaixo do limiar o sistema recusa em vez de deixar o modelo
   inventar. `Answer.grounded` deixa a UI/chamador saber.
 * As citações vêm do código (o que foi recuperado), nunca do texto do modelo.
-* Re-indexar um documento apaga os chunks antigos antes (sem fantasmas).
+* Reindexar substitui todos os chunks antigos (sem fantasmas), mas só depois
+  de gerar os embeddings novos: se o provedor falhar, a versão antiga fica.
+* `Retriever` concentra busca e limiar, usado pelo /ask e pela ferramenta do agente.
 """
 
 from collections.abc import Sequence

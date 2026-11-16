@@ -4,8 +4,11 @@ Lições de produção embutidas aqui (ver docs/LEARNINGS.md):
 
 * três tetos sempre: `max_iterations`, `budget` reconferido a cada volta e
   tamanho máximo do retorno de ferramenta (ele é reenviado em TODA volta);
+* o orçamento consome o uso de tokens informado pelo provedor, ou uma
+  estimativa quando ele não informa;
 * na última volta o modelo recebe `tools=[]`: sem isso o teto vira um final
-  sem saída, porque ele pede mais uma ferramenta em vez de concluir;
+  sem saída, porque ele pede mais uma ferramenta em vez de concluir. Se pedir
+  mesmo assim, o pedido é ignorado;
 * mesma ferramenta + mesmos argumentos não reexecuta: devolve um lembrete;
 * o modelo afirma o que não fez, então o texto final leva um rodapé gerado por
   código com o que de fato foi executado;

@@ -1,7 +1,7 @@
 """Adaptadores locais, sem rede nem chave: rodam em CI e na demo.
 
-Servem de referência de contrato para os adaptadores reais (Chroma,
-OpenSearch, SQS, Bedrock): a mesma suíte de testes vale para todos.
+Servem de referência de contrato para os adaptadores reais: a suíte de
+`tests/test_vector_store_contract.py` roda contra este store e contra o Chroma.
 """
 
 import hashlib
