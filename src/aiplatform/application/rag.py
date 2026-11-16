@@ -13,9 +13,10 @@ from aiplatform.application.ports import (
     ChatModelPort,
     EmbedderPort,
     EventPublisherPort,
+    Tracer,
     VectorStorePort,
 )
-from aiplatform.domain.models import AgentMessage, Answer, Chunk, Citation, Document
+from aiplatform.domain.models import AgentMessage, Answer, Chunk, Citation, Document, ScoredChunk
 
 CONTEXT_HEADER = "CONTEXTO:"
 QUESTION_HEADER = "PERGUNTA:"
@@ -89,22 +90,37 @@ class IndexDocument:
         return len(chunks)
 
 
-class AnswerQuestion:
+class Retriever:
+    """Busca por similaridade com limiar: abaixo de `min_score` o trecho não conta."""
+
     def __init__(
         self,
-        model: ChatModelPort,
         embedder: EmbedderPort,
         store: VectorStorePort,
         top_k: int = 4,
         min_score: float = 0.2,
+        tracer: Tracer | None = None,
     ) -> None:
-        self._model, self._embedder, self._store = model, embedder, store
+        self._embedder, self._store, self._tracer = embedder, store, tracer
         self._top_k, self._min_score = top_k, min_score
 
+    async def __call__(self, query: str) -> list[ScoredChunk]:
+        [vector] = await self._embedder.embed([query])
+        found = await self._store.search(vector, self._top_k)
+        hits = [h for h in found if h.score >= self._min_score]
+        if self._tracer:
+            # top_score antes do limiar: é o número que serve para calibrá-lo.
+            top = round(found[0].score, 4) if found else None
+            self._tracer.event("rag.retrieval", hits=len(hits), top_score=top)
+        return hits
+
+
+class AnswerQuestion:
+    def __init__(self, model: ChatModelPort, retrieve: Retriever) -> None:
+        self._model, self._retrieve = model, retrieve
+
     async def __call__(self, question: str) -> Answer:
-        [vector] = await self._embedder.embed([question])
-        hits = await self._store.search(vector, self._top_k)
-        hits = [h for h in hits if h.score >= self._min_score]
+        hits = await self._retrieve(question)
         if not hits:
             return Answer(NO_CONTEXT_REPLY, (), grounded=False)
 

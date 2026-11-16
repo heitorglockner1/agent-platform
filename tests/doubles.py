@@ -1,9 +1,10 @@
-"""Dublês de teste: modelo de chat com respostas roteirizadas."""
+"""Dublês de teste: modelo de chat roteirizado e tracer que grava eventos."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
-from aiplatform.application.ports import ChatModelPort
+from aiplatform.application.ports import ChatModelPort, Tracer
 from aiplatform.domain.models import AgentMessage, ToolSpec
 
 
@@ -26,3 +27,11 @@ class ScriptedChatModel(ChatModelPort):
         # Cópia: o loop continua mutando o histórico depois desta chamada.
         self.calls.append(ModelCall(list(messages), [t.name for t in tools]))
         return self._replies.pop(0) if self._replies else AgentMessage("assistant", "fim")
+
+
+class RecordingTracer(Tracer):
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, Any]]] = []
+
+    def event(self, name: str, **attrs: Any) -> None:
+        self.events.append((name, attrs))

@@ -2,10 +2,11 @@
 
 from fastapi import FastAPI
 
+from aiplatform.application.agentic_rag import AgentLimits
 from aiplatform.application.ports import ChatModelPort, EmbedderPort, VectorStorePort
-from aiplatform.infrastructure.demo import EchoContextModel
+from aiplatform.infrastructure.demo import DemoChatModel
 from aiplatform.infrastructure.local import HashingEmbedder, InMemoryEventBus, InMemoryVectorStore
-from aiplatform.observability import configure_logging
+from aiplatform.observability import LoggingTracer, configure_logging
 from aiplatform.settings import Settings
 from aiplatform.web.app import create_app
 
@@ -35,7 +36,7 @@ def _model(settings: Settings) -> ChatModelPort:
             raise _missing_extra("OPENAI_API_KEY", "langchain") from exc
         chat = ChatOpenAI(model=settings.llm_model)
         return LangChainChatModel(chat, timeout_s=settings.llm_timeout_s)
-    return EchoContextModel()
+    return DemoChatModel()
 
 
 def _embedder(settings: Settings) -> EmbedderPort:
@@ -59,6 +60,8 @@ def build_app(settings: Settings) -> FastAPI:
         InMemoryEventBus(),
         top_k=settings.rag_top_k,
         min_score=settings.rag_min_score,
+        agent_limits=AgentLimits(settings.agent_max_iterations, settings.agent_max_tokens),
+        tracer=LoggingTracer(),
     )
 
 

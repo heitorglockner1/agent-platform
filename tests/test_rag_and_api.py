@@ -1,9 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from aiplatform.application.rag import NO_CONTEXT_REPLY, AnswerQuestion, IndexDocument, chunk_text
+from aiplatform.application.rag import (
+    NO_CONTEXT_REPLY,
+    AnswerQuestion,
+    IndexDocument,
+    Retriever,
+    chunk_text,
+)
 from aiplatform.domain.models import Document
-from aiplatform.infrastructure.demo import EchoContextModel
+from aiplatform.infrastructure.demo import DemoChatModel
 from aiplatform.infrastructure.local import HashingEmbedder, InMemoryEventBus, InMemoryVectorStore
 from aiplatform.web.app import create_app
 
@@ -53,7 +59,7 @@ def _stack():
         bus,
         emb,
         IndexDocument(emb, store, bus),
-        AnswerQuestion(EchoContextModel(), emb, store),
+        AnswerQuestion(DemoChatModel(), Retriever(emb, store)),
     )
 
 
@@ -104,7 +110,7 @@ async def test_reindex_keeps_old_version_when_embedding_fails():
 
 def test_api_flow_metrics_and_request_id():
     store, bus, emb, _, _ = _stack()
-    client = TestClient(create_app(EchoContextModel(), emb, store, bus))
+    client = TestClient(create_app(DemoChatModel(), emb, store, bus))
     assert (
         client.post(
             "/documents", json={"id": "d", "text": "reembolso em sete dias", "source": "p"}

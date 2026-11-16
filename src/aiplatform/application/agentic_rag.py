@@ -1,0 +1,75 @@
+"""RAG com agente: o modelo decide o que buscar, o loop impõe os tetos."""
+
+from dataclasses import dataclass
+from typing import Any
+
+from aiplatform.application.agent_loop import run_agent
+from aiplatform.application.budget import TokenBudget
+from aiplatform.application.ports import ChatModelPort, Tracer
+from aiplatform.application.rag import Retriever
+from aiplatform.domain.models import AgentResult, ToolSpec
+
+SYSTEM_PROMPT = (
+    "Você responde perguntas usando a ferramenta search_documents. Busque antes de "
+    "responder. Se a busca não trouxer nada relevante, diga que não encontrou. Não invente."
+)
+
+SEARCH_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string", "description": "Termos a buscar nos documentos indexados."}
+    },
+    "required": ["query"],
+    "additionalProperties": False,
+}
+
+
+@dataclass(frozen=True)
+class AgentLimits:
+    max_iterations: int = 4
+    max_tokens: int = 20_000
+    tool_result_cap: int = 6_000
+
+
+DEFAULT_LIMITS = AgentLimits()
+
+
+class AnswerWithAgent:
+    def __init__(
+        self,
+        model: ChatModelPort,
+        retrieve: Retriever,
+        limits: AgentLimits = DEFAULT_LIMITS,
+        tracer: Tracer | None = None,
+    ) -> None:
+        self._model, self._retrieve = model, retrieve
+        self._limits, self._tracer = limits, tracer
+        self._search = ToolSpec(
+            "search_documents",
+            "Busca trechos relevantes nos documentos indexados.",
+            SEARCH_SCHEMA,
+            self._search_documents,
+        )
+
+    async def _search_documents(self, query: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "chunk_id": h.chunk.id,
+                "source": h.chunk.source,
+                "text": h.chunk.text,
+                "score": round(h.score, 4),
+            }
+            for h in await self._retrieve(query)
+        ]
+
+    async def __call__(self, task: str) -> AgentResult:
+        return await run_agent(
+            self._model,
+            SYSTEM_PROMPT,
+            task,
+            [self._search],
+            max_iterations=self._limits.max_iterations,
+            tool_result_cap=self._limits.tool_result_cap,
+            budget=TokenBudget(self._limits.max_tokens),  # novo a cada execução
+            tracer=self._tracer,
+        )

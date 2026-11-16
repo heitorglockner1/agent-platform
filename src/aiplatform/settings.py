@@ -40,6 +40,8 @@ class Settings:
     embedding_model: str = "text-embedding-3-small"
     rag_top_k: int = 4
     rag_min_score: float = 0.2
+    agent_max_iterations: int = 4
+    agent_max_tokens: int = 20_000
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Settings":
@@ -55,4 +57,8 @@ class Settings:
             embedding_model=environ.get("EMBEDDING_MODEL", cls.embedding_model),
             rag_top_k=_number(environ, "RAG_TOP_K", int, cls.rag_top_k),
             rag_min_score=_number(environ, "RAG_MIN_SCORE", float, cls.rag_min_score),
+            agent_max_iterations=_number(
+                environ, "AGENT_MAX_ITERATIONS", int, cls.agent_max_iterations
+            ),
+            agent_max_tokens=_number(environ, "AGENT_MAX_TOKENS", int, cls.agent_max_tokens),
         )

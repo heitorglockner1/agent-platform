@@ -4,6 +4,9 @@ import json
 import logging
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from typing import Any
+
+from aiplatform.application.ports import Tracer
 
 request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -35,3 +38,13 @@ def configure_logging() -> None:
     handler.setFormatter(JsonFormatter())
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+
+
+class LoggingTracer(Tracer):
+    """Eventos de LLM como logs JSON; troque por Langfuse ou OpenTelemetry sem mudar o loop."""
+
+    def __init__(self) -> None:
+        self._log = logging.getLogger("aiplatform.trace")
+
+    def event(self, name: str, **attrs: Any) -> None:
+        self._log.info(name, extra={"attrs": attrs})

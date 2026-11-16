@@ -18,14 +18,16 @@ from prometheus_client import (
 from pydantic import BaseModel, Field
 from starlette.middleware.base import RequestResponseEndpoint
 
+from aiplatform.application.agentic_rag import DEFAULT_LIMITS, AgentLimits, AnswerWithAgent
 from aiplatform.application.ports import (
     ChatModelPort,
     EmbedderPort,
     EventPublisherPort,
     ProviderUnavailableError,
+    Tracer,
     VectorStorePort,
 )
-from aiplatform.application.rag import AnswerQuestion, IndexDocument
+from aiplatform.application.rag import AnswerQuestion, IndexDocument, Retriever
 from aiplatform.domain.models import Document
 from aiplatform.observability import request_id
 
@@ -41,6 +43,19 @@ class IndexRequest(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
+
+
+class AgentRequest(BaseModel):
+    task: str = Field(min_length=1, max_length=2000)
+
+
+class AgentResponse(BaseModel):
+    answer: str
+    stopped_by: str
+    iterations: int
+    tool_calls_executed: int
+    tokens_used: int
+    errors: list[str]
 
 
 class HealthResponse(BaseModel):
@@ -78,16 +93,23 @@ def create_app(
     *,
     top_k: int = 4,
     min_score: float = 0.2,
+    agent_limits: AgentLimits = DEFAULT_LIMITS,
+    tracer: Tracer | None = None,
 ) -> FastAPI:
     registry = registry or CollectorRegistry()
     requests_total = Counter(
         "http_requests_total", "Requisições", ["path", "status"], registry=registry
     )
     latency = Histogram("http_request_seconds", "Latência", ["path"], registry=registry)
+    agent_runs = Counter(
+        "agent_runs_total", "Execuções do agente", ["stopped_by"], registry=registry
+    )
     log = logging.getLogger("aiplatform")
 
     index_document = IndexDocument(embedder, store, events)
-    answer_question = AnswerQuestion(model, embedder, store, top_k=top_k, min_score=min_score)
+    retrieve = Retriever(embedder, store, top_k=top_k, min_score=min_score, tracer=tracer)
+    answer_question = AnswerQuestion(model, retrieve)
+    answer_with_agent = AnswerWithAgent(model, retrieve, agent_limits, tracer)
     app = FastAPI(title="Agent Platform")
 
     @app.exception_handler(ProviderUnavailableError)
@@ -137,6 +159,19 @@ def create_app(
             answer=a.text,
             grounded=a.grounded,
             citations=[CitationOut(**asdict(c)) for c in a.citations],
+        )
+
+    @app.post("/agent")
+    async def agent(body: AgentRequest) -> AgentResponse:
+        r = await answer_with_agent(body.task)
+        agent_runs.labels(r.stopped_by).inc()
+        return AgentResponse(
+            answer=r.final_text,
+            stopped_by=r.stopped_by,
+            iterations=r.iterations,
+            tool_calls_executed=r.tool_calls_executed,
+            tokens_used=r.tokens_used,
+            errors=r.errors,
         )
 
     return app
