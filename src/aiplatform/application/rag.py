@@ -22,25 +22,43 @@ QUESTION_HEADER = "PERGUNTA:"
 NO_CONTEXT_REPLY = "Não encontrei isso nos documentos indexados."
 
 
+def _tail(words: list[str], overlap: int) -> list[str]:
+    """Maior sufixo de `words` que cabe em `overlap` caracteres."""
+    kept = 0
+    count = 0
+    for word in reversed(words):
+        if kept + len(word) + 1 > overlap:
+            break
+        kept += len(word) + 1
+        count += 1
+    return words[len(words) - count :]
+
+
 def chunk_text(text: str, size: int = 800, overlap: int = 100) -> list[str]:
-    """Janela por palavras, ~`size` caracteres, com `overlap` de sobreposição."""
+    """Janela por palavras de ~`size` caracteres, repetindo até `overlap` caracteres.
+
+    Como a sobreposição é sempre menor que `size`, todo trecho traz ao menos uma
+    palavra nova.
+    """
+    if size <= 0:
+        raise ValueError(f"size deve ser positivo, recebeu {size}")
+    if not 0 <= overlap < size:
+        raise ValueError(f"overlap deve estar em [0, size), recebeu {overlap} com size={size}")
+
     chunks: list[str] = []
     current: list[str] = []
     length = 0
+    fresh = 0  # palavras ainda não emitidas em nenhum trecho
     for word in text.split():
         current.append(word)
         length += len(word) + 1
+        fresh += 1
         if length >= size:
             chunks.append(" ".join(current))
-            keep: list[str] = []
-            back = 0
-            for w in reversed(current):
-                back += len(w) + 1
-                keep.insert(0, w)
-                if back >= overlap:
-                    break
-            current, length = keep, sum(len(w) + 1 for w in keep)
-    if current and (not chunks or " ".join(current) != chunks[-1]):
+            current = _tail(current, overlap)
+            length = sum(len(w) + 1 for w in current)
+            fresh = 0
+    if fresh:
         chunks.append(" ".join(current))
     return chunks
 

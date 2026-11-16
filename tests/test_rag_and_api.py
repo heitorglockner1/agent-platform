@@ -16,6 +16,36 @@ def test_chunking_overlaps_and_covers_everything():
     assert "w499" in chunks[-1]
 
 
+def test_chunking_does_not_emit_a_chunk_made_only_of_overlap():
+    assert len(chunk_text(" ".join(["abcd"] * 40), size=200, overlap=40)) == 1
+
+
+def test_every_chunk_adds_new_words_and_rebuilds_the_text():
+    words = [f"w{i}" for i in range(500)]
+    chunks = [c.split() for c in chunk_text(" ".join(words), size=200, overlap=40)]
+    rebuilt = list(chunks[0])
+    for chunk in chunks[1:]:
+        start = rebuilt.index(chunk[0]) if chunk[0] in rebuilt else len(rebuilt)
+        assert len(rebuilt) - start < len(chunk)  # ao menos uma palavra nova
+        rebuilt = rebuilt[:start] + chunk
+    assert rebuilt == words
+
+
+def test_zero_overlap_repeats_nothing():
+    chunks = [set(c.split()) for c in chunk_text(" ".join(f"w{i}" for i in range(300)), 100, 0)]
+    assert all(not (a & b) for a, b in zip(chunks, chunks[1:], strict=False))
+
+
+@pytest.mark.parametrize(("size", "overlap"), [(100, 100), (100, 150), (0, 0), (-5, 0), (100, -1)])
+def test_invalid_chunk_parameters_are_rejected(size, overlap):
+    with pytest.raises(ValueError):
+        chunk_text("texto qualquer", size, overlap)
+
+
+def test_empty_text_has_no_chunks():
+    assert chunk_text("   ") == []
+
+
 def _stack():
     store, bus, emb = InMemoryVectorStore(), InMemoryEventBus(), HashingEmbedder()
     return (
