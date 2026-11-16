@@ -32,6 +32,7 @@ def _number(environ: Mapping[str, str], name: str, parse: Callable[[str], _N], d
 class Settings:
     llm: LlmKind = "demo"
     llm_model: str = "gpt-4o-mini"
+    llm_timeout_s: float = 30.0
     vector_store: VectorStoreKind = "memory"
     chroma_path: str | None = None
     rag_top_k: int = 4
@@ -43,6 +44,7 @@ class Settings:
         return cls(
             llm="openai" if environ.get("OPENAI_API_KEY") else "demo",
             llm_model=environ.get("LLM_MODEL", cls.llm_model),
+            llm_timeout_s=_number(environ, "LLM_TIMEOUT_S", float, cls.llm_timeout_s),
             vector_store=cast(VectorStoreKind, store),
             chroma_path=environ.get("CHROMA_PATH") or None,
             rag_top_k=_number(environ, "RAG_TOP_K", int, cls.rag_top_k),

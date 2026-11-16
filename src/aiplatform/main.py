@@ -33,7 +33,8 @@ def _model(settings: Settings) -> ChatModelPort:
             from aiplatform.infrastructure.langchain_chat import LangChainChatModel
         except ImportError as exc:
             raise _missing_extra("OPENAI_API_KEY", "langchain") from exc
-        return LangChainChatModel(ChatOpenAI(model=settings.llm_model))
+        chat = ChatOpenAI(model=settings.llm_model)
+        return LangChainChatModel(chat, timeout_s=settings.llm_timeout_s)
     return EchoContextModel()
 
 

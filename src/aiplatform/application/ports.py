@@ -15,17 +15,25 @@ from typing import Any
 from aiplatform.domain.models import AgentMessage, Chunk, ScoredChunk, ToolSpec
 
 
+class ProviderUnavailableError(Exception):
+    """Falha do provedor externo (rede, timeout, limite). A API devolve 502."""
+
+
 class ChatModelPort(ABC):
     @abstractmethod
     async def complete(
         self, messages: Sequence[AgentMessage], tools: Sequence[ToolSpec]
     ) -> AgentMessage:
-        """Uma volta. Com `tools` vazio o modelo é obrigado a responder em texto."""
+        """Uma volta. Com `tools` vazio o modelo é obrigado a responder em texto.
+
+        Falha do provedor levanta `ProviderUnavailableError`.
+        """
 
 
 class EmbedderPort(ABC):
     @abstractmethod
-    async def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Um vetor por texto. Falha do provedor levanta `ProviderUnavailableError`."""
 
 
 class VectorStorePort(ABC):

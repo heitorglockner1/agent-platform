@@ -19,13 +19,14 @@ def test_settings_read_every_variable():
         {
             "OPENAI_API_KEY": "sk-x",
             "LLM_MODEL": "gpt-x",
+            "LLM_TIMEOUT_S": "5",
             "VECTOR_STORE": "chroma",
             "CHROMA_PATH": "/data",
             "RAG_TOP_K": "8",
             "RAG_MIN_SCORE": "0.5",
         }
     )
-    assert s == Settings("openai", "gpt-x", "chroma", "/data", 8, 0.5)
+    assert s == Settings("openai", "gpt-x", 5.0, "chroma", "/data", 8, 0.5)
 
 
 @pytest.mark.parametrize(

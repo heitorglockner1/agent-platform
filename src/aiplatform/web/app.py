@@ -1,11 +1,13 @@
 """API FastAPI: composição na `create_app`, rotas finas, observabilidade."""
 
 import logging
+import re
 import time
 import uuid
-from typing import Any
+from dataclasses import asdict
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
@@ -20,11 +22,15 @@ from aiplatform.application.ports import (
     ChatModelPort,
     EmbedderPort,
     EventPublisherPort,
+    ProviderUnavailableError,
     VectorStorePort,
 )
 from aiplatform.application.rag import AnswerQuestion, IndexDocument
 from aiplatform.domain.models import Document
 from aiplatform.observability import request_id
+
+# O id vem do cliente e vai para os logs: só aceita um formato curto e seguro.
+_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
 class IndexRequest(BaseModel):
@@ -35,6 +41,32 @@ class IndexRequest(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
+
+
+class HealthResponse(BaseModel):
+    status: str
+
+
+class IndexResponse(BaseModel):
+    document_id: str
+    chunks: int
+
+
+class CitationOut(BaseModel):
+    chunk_id: str
+    source: str
+    score: float
+
+
+class AskResponse(BaseModel):
+    answer: str
+    grounded: bool
+    citations: list[CitationOut]
+
+
+def _incoming_request_id(req: Request) -> str:
+    candidate = req.headers.get("x-request-id", "")
+    return candidate if _REQUEST_ID.match(candidate) else uuid.uuid4().hex[:12]
 
 
 def create_app(
@@ -56,41 +88,55 @@ def create_app(
 
     index_document = IndexDocument(embedder, store, events)
     answer_question = AnswerQuestion(model, embedder, store, top_k=top_k, min_score=min_score)
-    app = FastAPI(title="AI Agent Platform")
+    app = FastAPI(title="Agent Platform")
+
+    @app.exception_handler(ProviderUnavailableError)
+    async def provider_unavailable(_: Request, exc: ProviderUnavailableError) -> JSONResponse:
+        log.warning("provedor indisponível: %s", exc)
+        return JSONResponse({"detail": "Provedor de IA indisponível."}, status_code=502)
 
     @app.middleware("http")
     async def observe(req: Request, call_next: RequestResponseEndpoint) -> Response:
-        token = request_id.set(req.headers.get("x-request-id") or uuid.uuid4().hex[:12])
+        token = request_id.set(_incoming_request_id(req))
         started = time.perf_counter()
-        resp = await call_next(req)
-        path = req.scope["route"].path if "route" in req.scope else "unmatched"
-        latency.labels(path).observe(time.perf_counter() - started)
-        requests_total.labels(path, str(resp.status_code)).inc()
-        resp.headers["x-request-id"] = request_id.get()
-        log.info("%s %s -> %s", req.method, req.url.path, resp.status_code)
-        request_id.reset(token)
+        status = 500
+        try:
+            resp = await call_next(req)
+            status = resp.status_code
+        except Exception:
+            log.exception("erro não tratado em %s %s", req.method, req.url.path)
+            resp = JSONResponse(
+                {"detail": "Erro interno.", "request_id": request_id.get()}, status_code=500
+            )
+        finally:
+            path = req.scope["route"].path if "route" in req.scope else "unmatched"
+            latency.labels(path).observe(time.perf_counter() - started)
+            requests_total.labels(path, str(status)).inc()
+            log.info("%s %s -> %s", req.method, req.url.path, status)
+            resp.headers["x-request-id"] = request_id.get()
+            request_id.reset(token)
         return resp
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> HealthResponse:
+        return HealthResponse(status="ok")
 
     @app.get("/metrics")
     def metrics() -> Response:
         return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
     @app.post("/documents", status_code=201)
-    async def post_document(body: IndexRequest) -> dict[str, Any]:
+    async def post_document(body: IndexRequest) -> IndexResponse:
         n = await index_document(Document(body.id, body.text, body.source))
-        return {"document_id": body.id, "chunks": n}
+        return IndexResponse(document_id=body.id, chunks=n)
 
     @app.post("/ask")
-    async def ask(body: AskRequest) -> dict[str, Any]:
+    async def ask(body: AskRequest) -> AskResponse:
         a = await answer_question(body.question)
-        return {
-            "answer": a.text,
-            "grounded": a.grounded,
-            "citations": [c.__dict__ for c in a.citations],
-        }
+        return AskResponse(
+            answer=a.text,
+            grounded=a.grounded,
+            citations=[CitationOut(**asdict(c)) for c in a.citations],
+        )
 
     return app

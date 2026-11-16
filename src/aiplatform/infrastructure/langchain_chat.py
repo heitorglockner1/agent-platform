@@ -5,11 +5,12 @@ ChatOllama...), então trocar de provedor não toca em domínio nem aplicação.
 O loop do agente continua nosso: o LangChain entra só como camada de provedor.
 """
 
+import asyncio
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, assert_never
 from uuid import uuid4
 
-from aiplatform.application.ports import ChatModelPort
+from aiplatform.application.ports import ChatModelPort, ProviderUnavailableError
 from aiplatform.domain.models import AgentMessage, TokenUsage, ToolCall, ToolSpec
 
 if TYPE_CHECKING:
@@ -61,15 +62,20 @@ def _tool_schema(spec: ToolSpec) -> dict[str, Any]:
 
 
 class LangChainChatModel(ChatModelPort):
-    def __init__(self, chat_model: "BaseChatModel") -> None:
+    def __init__(self, chat_model: "BaseChatModel", timeout_s: float = 30.0) -> None:
         self._chat = chat_model
+        self._timeout_s = timeout_s
 
     async def complete(
         self, messages: Sequence[AgentMessage], tools: Sequence[ToolSpec]
     ) -> AgentMessage:
         # Lista vazia: não chama bind_tools (várias APIs recusam `tools=[]`).
         runnable = self._chat.bind_tools([_tool_schema(t) for t in tools]) if tools else self._chat
-        reply = await runnable.ainvoke(_to_lc(messages))
+        try:
+            async with asyncio.timeout(self._timeout_s):
+                reply = await runnable.ainvoke(_to_lc(messages))
+        except Exception as exc:
+            raise ProviderUnavailableError(f"{type(exc).__name__}: {exc}") from exc
         # Sem id a mensagem `tool` seguinte não teria com o que se correlacionar.
         calls = [
             ToolCall(c["id"] or uuid4().hex, c["name"], c["args"])

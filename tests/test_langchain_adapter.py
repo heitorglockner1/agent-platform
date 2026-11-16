@@ -1,9 +1,12 @@
+import asyncio
+
 import pytest
 
 pytest.importorskip("langchain_core")
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage  # noqa: E402
 
+from aiplatform.application.ports import ProviderUnavailableError  # noqa: E402
 from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec  # noqa: E402
 from aiplatform.infrastructure.langchain_chat import LangChainChatModel  # noqa: E402
 
@@ -80,3 +83,15 @@ async def test_every_role_maps_to_its_langchain_message():
     ]
     await LangChainChatModel(stub).complete(history, [])
     assert [type(m) for m in stub.seen] == [SystemMessage, HumanMessage, AIMessage, ToolMessage]
+
+
+class SlowChat(StubChat):
+    async def ainvoke(self, messages):
+        await asyncio.sleep(1)
+
+
+async def test_slow_provider_times_out_as_unavailable():
+    with pytest.raises(ProviderUnavailableError):
+        await LangChainChatModel(SlowChat(), timeout_s=0.01).complete(
+            [AgentMessage("user", "oi")], []
+        )
