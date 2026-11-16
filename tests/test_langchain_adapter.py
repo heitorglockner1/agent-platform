@@ -2,9 +2,9 @@ import pytest
 
 pytest.importorskip("langchain_core")
 
-from langchain_core.messages import AIMessage  # noqa: E402
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage  # noqa: E402
 
-from aiplatform.domain.models import AgentMessage, ToolSpec  # noqa: E402
+from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec  # noqa: E402
 from aiplatform.infrastructure.langchain_chat import LangChainChatModel  # noqa: E402
 
 
@@ -53,3 +53,30 @@ class UsageChat(StubChat):
 async def test_usage_reported_by_provider_is_kept():
     reply = await LangChainChatModel(UsageChat()).complete([AgentMessage("user", "oi")], [])
     assert reply.usage is not None and reply.usage.total == 15
+
+
+class BlocksChat(StubChat):
+    async def ainvoke(self, messages):
+        blocks = [
+            {"type": "text", "text": "Olá"},
+            {"type": "tool_use", "id": "c1", "name": "lookup", "input": {}},
+        ]
+        return AIMessage(content=blocks, tool_calls=[{"id": None, "name": "lookup", "args": {}}])
+
+
+async def test_content_blocks_become_plain_text_and_missing_id_is_filled():
+    reply = await LangChainChatModel(BlocksChat()).complete([AgentMessage("user", "oi")], [])
+    assert reply.content == "Olá"
+    assert reply.tool_calls[0].id
+
+
+async def test_every_role_maps_to_its_langchain_message():
+    stub = StubChat()
+    history = [
+        AgentMessage("system", "s"),
+        AgentMessage("user", "u"),
+        AgentMessage("assistant", tool_calls=[ToolCall("c1", "lookup", {})]),
+        AgentMessage("tool", "r", tool_call_id="c1"),
+    ]
+    await LangChainChatModel(stub).complete(history, [])
+    assert [type(m) for m in stub.seen] == [SystemMessage, HumanMessage, AIMessage, ToolMessage]

@@ -5,9 +5,9 @@ ChatOllama...), então trocar de provedor não toca em domínio nem aplicação.
 O loop do agente continua nosso: o LangChain entra só como camada de provedor.
 """
 
-import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_never
+from uuid import uuid4
 
 from aiplatform.application.ports import ChatModelPort
 from aiplatform.domain.models import AgentMessage, TokenUsage, ToolCall, ToolSpec
@@ -22,16 +22,31 @@ def _to_lc(messages: Sequence[AgentMessage]) -> list["BaseMessage"]:
 
     out: list[BaseMessage] = []
     for m in messages:
-        if m.role == "system":
-            out.append(SystemMessage(content=m.content))
-        elif m.role == "user":
-            out.append(HumanMessage(content=m.content))
-        elif m.role == "tool":
-            out.append(ToolMessage(content=m.content, tool_call_id=m.tool_call_id or ""))
-        else:
-            calls = [{"id": c.id, "name": c.name, "args": c.arguments} for c in m.tool_calls]
-            out.append(AIMessage(content=m.content, tool_calls=calls))
+        match m.role:
+            case "system":
+                out.append(SystemMessage(content=m.content))
+            case "user":
+                out.append(HumanMessage(content=m.content))
+            case "tool":
+                out.append(ToolMessage(content=m.content, tool_call_id=m.tool_call_id or ""))
+            case "assistant":
+                calls = [{"id": c.id, "name": c.name, "args": c.arguments} for c in m.tool_calls]
+                out.append(AIMessage(content=m.content, tool_calls=calls))
+            case _:
+                assert_never(m.role)
     return out
+
+
+def _text(content: str | list[str | dict[str, Any]]) -> str:
+    """Bedrock e Anthropic devolvem lista de blocos; só os de texto interessam."""
+    if isinstance(content, str):
+        return content
+    parts = [
+        block if isinstance(block, str) else str(block.get("text", ""))
+        for block in content
+        if isinstance(block, str) or block.get("type") == "text"
+    ]
+    return "".join(parts)
 
 
 def _tool_schema(spec: ToolSpec) -> dict[str, Any]:
@@ -55,16 +70,13 @@ class LangChainChatModel(ChatModelPort):
         # Lista vazia: não chama bind_tools (várias APIs recusam `tools=[]`).
         runnable = self._chat.bind_tools([_tool_schema(t) for t in tools]) if tools else self._chat
         reply = await runnable.ainvoke(_to_lc(messages))
+        # Sem id a mensagem `tool` seguinte não teria com o que se correlacionar.
         calls = [
-            ToolCall(
-                c["id"],
-                c["name"],
-                c["args"] if isinstance(c["args"], dict) else json.loads(c["args"]),
-            )
+            ToolCall(c["id"] or uuid4().hex, c["name"], c["args"])
             for c in (getattr(reply, "tool_calls", None) or [])
         ]
         meta = getattr(reply, "usage_metadata", None)
         usage = TokenUsage(meta["input_tokens"], meta["output_tokens"]) if meta else None
         return AgentMessage(
-            role="assistant", content=str(reply.content or ""), tool_calls=calls, usage=usage
+            role="assistant", content=_text(reply.content), tool_calls=calls, usage=usage
         )
