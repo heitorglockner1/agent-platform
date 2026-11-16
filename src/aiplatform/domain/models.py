@@ -69,6 +69,16 @@ class ToolCall:
     arguments: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class TokenUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+
 @dataclass
 class AgentMessage:
     role: Role
@@ -76,6 +86,7 @@ class AgentMessage:
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None
     name: str | None = None
+    usage: TokenUsage | None = None  # informado pelo provedor, quando houver
 
 
 @dataclass
@@ -85,3 +96,4 @@ class AgentResult:
     tool_calls_executed: int
     stopped_by: StopReason
     errors: list[str] = field(default_factory=list)
+    tokens_used: int = 0

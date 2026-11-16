@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from aiplatform.application.ports import ChatModelPort
-from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec
+from aiplatform.domain.models import AgentMessage, TokenUsage, ToolCall, ToolSpec
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -63,4 +63,8 @@ class LangChainChatModel(ChatModelPort):
             )
             for c in (getattr(reply, "tool_calls", None) or [])
         ]
-        return AgentMessage(role="assistant", content=str(reply.content or ""), tool_calls=calls)
+        meta = getattr(reply, "usage_metadata", None)
+        usage = TokenUsage(meta["input_tokens"], meta["output_tokens"]) if meta else None
+        return AgentMessage(
+            role="assistant", content=str(reply.content or ""), tool_calls=calls, usage=usage
+        )

@@ -1,5 +1,5 @@
 from aiplatform.application.agent_loop import NO_CONCLUSION_REPLY, run_agent
-from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec
+from aiplatform.domain.models import AgentMessage, TokenUsage, ToolCall, ToolSpec
 from aiplatform.infrastructure.fakes import ScriptedChatModel, TokenBudget
 
 
@@ -96,3 +96,27 @@ async def test_tool_result_keeps_accents():
     await run_agent(model, "sys", "go", [_tool(lookup)])
     [tool_msg] = _tool_messages(model, 1)
     assert "não é possível" in tool_msg.content
+
+
+def _calls_with_usage(n, usage=None):
+    replies = [_call(args={"q": str(i)}, id=str(i)) for i in range(n)]
+    for reply in replies:
+        reply.usage = usage
+    return replies
+
+
+async def _ok(q):
+    return "ok"
+
+
+async def test_reported_usage_consumes_the_budget():
+    model = ScriptedChatModel(_calls_with_usage(6, TokenUsage(60, 40)))
+    r = await run_agent(model, "sys", "go", [_tool(_ok)], max_iterations=6, budget=TokenBudget(150))
+    assert r.stopped_by == "budget" and r.iterations == 2
+    assert r.tokens_used == 200 and len(model.calls) == 2
+
+
+async def test_budget_uses_an_estimate_when_provider_reports_nothing():
+    model = ScriptedChatModel(_calls_with_usage(6))
+    r = await run_agent(model, "s" * 400, "go", [_tool(_ok)], budget=TokenBudget(150))
+    assert r.stopped_by == "budget" and r.iterations == 2

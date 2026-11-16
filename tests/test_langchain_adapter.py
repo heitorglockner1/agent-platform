@@ -42,3 +42,14 @@ async def test_empty_tools_does_not_bind():
     stub = StubChat()
     await LangChainChatModel(stub).complete([AgentMessage("user", "oi")], [])
     assert stub.bound is None
+
+
+class UsageChat(StubChat):
+    async def ainvoke(self, messages):
+        usage = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+        return AIMessage(content="ok", usage_metadata=usage)
+
+
+async def test_usage_reported_by_provider_is_kept():
+    reply = await LangChainChatModel(UsageChat()).complete([AgentMessage("user", "oi")], [])
+    assert reply.usage is not None and reply.usage.total == 15
