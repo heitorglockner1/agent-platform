@@ -1,4 +1,4 @@
-from aiplatform.application.agent_loop import run_agent
+from aiplatform.application.agent_loop import NO_CONCLUSION_REPLY, run_agent
 from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec
 from aiplatform.infrastructure.fakes import ScriptedChatModel, TokenBudget
 
@@ -9,6 +9,10 @@ def _call(name="lookup", args=None, id="1"):
 
 def _tool(handler):
     return ToolSpec("lookup", "busca", {"type": "object"}, handler)
+
+
+def _tool_messages(model, call_index):
+    return [m for m in model.calls[call_index].messages if m.role == "tool"]
 
 
 async def test_concludes_and_footer_lists_what_really_ran():
@@ -44,13 +48,18 @@ async def test_repeated_call_does_not_reexecute():
 
 
 async def test_last_turn_has_no_tools_so_model_must_conclude():
+    runs = []
+
     async def lookup(q):
+        runs.append(q)
         return "ok"
 
     model = ScriptedChatModel([_call(args={"q": str(i)}, id=str(i)) for i in range(3)])
     r = await run_agent(model, "sys", "go", [_tool(lookup)], max_iterations=3)
-    assert model.calls[-1]["tools"] == []
-    assert r.iterations == 3
+    assert model.calls[-1].tools == []
+    assert runs == ["0", "1"]  # o pedido da última volta não executa
+    assert r.stopped_by == "max_iterations" and r.iterations == 3
+    assert r.final_text.startswith(NO_CONCLUSION_REPLY)
 
 
 async def test_budget_stops_before_calling_model():
@@ -65,5 +74,25 @@ async def test_tool_result_is_capped():
 
     model = ScriptedChatModel([_call(), AgentMessage("assistant", "fim")])
     await run_agent(model, "sys", "go", [_tool(lookup)], tool_result_cap=100)
-    # o modelo recebe system+user+assistant+tool(capado) na segunda volta
-    assert model.calls[1]["n_messages"] == 4
+    [tool_msg] = _tool_messages(model, 1)
+    assert "cortado" in tool_msg.content and len(tool_msg.content) < 200
+
+
+async def test_large_error_is_capped_too():
+    async def lookup(q):
+        raise ValueError("x" * 10_000)
+
+    model = ScriptedChatModel([_call(), AgentMessage("assistant", "fim")])
+    await run_agent(model, "sys", "go", [_tool(lookup)], tool_result_cap=100)
+    [tool_msg] = _tool_messages(model, 1)
+    assert tool_msg.content.startswith("ERRO:") and len(tool_msg.content) < 200
+
+
+async def test_tool_result_keeps_accents():
+    async def lookup(q):
+        return {"msg": "não é possível"}
+
+    model = ScriptedChatModel([_call(), AgentMessage("assistant", "fim")])
+    await run_agent(model, "sys", "go", [_tool(lookup)])
+    [tool_msg] = _tool_messages(model, 1)
+    assert "não é possível" in tool_msg.content

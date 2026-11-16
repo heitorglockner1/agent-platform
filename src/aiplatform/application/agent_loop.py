@@ -15,9 +15,18 @@ Lições de produção embutidas aqui (ver docs/LEARNINGS.md):
 import json
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from aiplatform.application.ports import BudgetPort, ChatModelPort, Tracer
 from aiplatform.domain.models import AgentMessage, AgentResult, StopReason, ToolCall, ToolSpec
+
+NO_CONCLUSION_REPLY = "Não foi possível concluir dentro dos limites definidos."
+
+
+@dataclass(frozen=True)
+class _ToolOutcome:
+    content: str
+    ok: bool
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -34,14 +43,16 @@ def _footer(executed: list[str], errors: list[str]) -> str:
     return line + "]"
 
 
-async def _run_tool(call: ToolCall, specs: dict[str, ToolSpec], cap: int) -> str:
+async def _run_tool(call: ToolCall, specs: dict[str, ToolSpec], cap: int) -> _ToolOutcome:
     spec = specs.get(call.name)
     if spec is None:
-        return f"ERRO: ferramenta desconhecida '{call.name}'."
+        return _ToolOutcome(f"ERRO: ferramenta desconhecida '{call.name}'.", ok=False)
     try:
-        return _truncate(json.dumps(await spec.handler(**call.arguments), default=str), cap)
+        result = await spec.handler(**call.arguments)
     except Exception as exc:  # o handler é lei: recusa vira texto para o modelo
-        return f"ERRO: {type(exc).__name__}: {exc}"
+        # Exceção pode carregar um corpo HTTP inteiro: o teto vale também aqui.
+        return _ToolOutcome(_truncate(f"ERRO: {type(exc).__name__}: {exc}", cap), ok=False)
+    return _ToolOutcome(_truncate(json.dumps(result, default=str, ensure_ascii=False), cap), True)
 
 
 async def run_agent(
@@ -80,9 +91,10 @@ async def run_agent(
             )
         history.append(reply)
         if not reply.tool_calls:
-            return AgentResult(
-                reply.content + _footer(executed, errors), turn, len(executed), "concluded", errors
-            )
+            return _finish(history, turn, executed, errors, "concluded")
+        if last_turn:
+            # Nenhuma ferramenta foi oferecida: o pedido não é atendido.
+            break
 
         for call in reply.tool_calls:
             key = f"{call.name}:{json.dumps(call.arguments, sort_keys=True)}"
@@ -90,10 +102,12 @@ async def run_agent(
                 out = "Chamada repetida: o resultado já está acima. Conclua com o que tem."
             else:
                 seen.add(key)
-                out = await _run_tool(call, specs, tool_result_cap)
-                (errors if out.startswith("ERRO:") else executed).append(
-                    out if out.startswith("ERRO:") else call.name
-                )
+                outcome = await _run_tool(call, specs, tool_result_cap)
+                out = outcome.content
+                if outcome.ok:
+                    executed.append(call.name)
+                else:
+                    errors.append(out)
             history.append(
                 AgentMessage(role="tool", content=out, tool_call_id=call.id, name=call.name)
             )
@@ -108,5 +122,8 @@ def _finish(
     errors: list[str],
     reason: StopReason,
 ) -> AgentResult:
-    last = next((m.content for m in reversed(history) if m.role == "assistant" and m.content), "")
+    last = next(
+        (m.content for m in reversed(history) if m.role == "assistant" and m.content),
+        NO_CONCLUSION_REPLY,
+    )
     return AgentResult(last + _footer(executed, errors), turns, len(executed), reason, errors)
