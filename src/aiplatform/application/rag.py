@@ -60,9 +60,11 @@ class IndexDocument:
     def __call__(self, doc: Document) -> int:
         pieces = chunk_text(doc.text, self._size, self._overlap)
         chunks = [Chunk(doc.id, i, t, doc.source) for i, t in enumerate(pieces)]
+        # Embeddings antes de apagar: se o provedor falhar, a versão antiga continua.
+        vectors = self._embedder.embed([c.text for c in chunks]) if chunks else []
         self._store.delete_document(doc.id)
         if chunks:
-            self._store.upsert(chunks, self._embedder.embed([c.text for c in chunks]))
+            self._store.upsert(chunks, vectors)
         self._events.publish("document.indexed", {"document_id": doc.id, "chunks": len(chunks)})
         return len(chunks)
 

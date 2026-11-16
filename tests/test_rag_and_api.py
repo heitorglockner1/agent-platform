@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from aiplatform.application.rag import NO_CONTEXT_REPLY, AnswerQuestion, IndexDocument, chunk_text
@@ -55,6 +56,20 @@ def test_reindex_removes_old_chunks_and_publishes_event():
     texts = [s.chunk.text for s in store.search(emb.embed(["alfa"])[0], 10)]
     assert texts == ["totalmente diferente agora"]
     assert [t for t, _ in bus.published] == ["document.indexed"] * 2
+
+
+class FailingEmbedder(HashingEmbedder):
+    def embed(self, texts):
+        raise RuntimeError("provedor fora do ar")
+
+
+def test_reindex_keeps_old_version_when_embedding_fails():
+    store, bus, emb, index, _ = _stack()
+    index(Document("d1", "alfa beta gama", "a"))
+    with pytest.raises(RuntimeError):
+        IndexDocument(FailingEmbedder(), store, bus)(Document("d1", "versão nova", "a"))
+    texts = [s.chunk.text for s in store.search(emb.embed(["alfa"])[0], 10)]
+    assert texts == ["alfa beta gama"]
 
 
 def test_api_flow_metrics_and_request_id():
