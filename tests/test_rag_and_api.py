@@ -18,7 +18,13 @@ def test_chunking_overlaps_and_covers_everything():
 
 def _stack():
     store, bus, emb = InMemoryVectorStore(), InMemoryEventBus(), HashingEmbedder()
-    return store, bus, emb, IndexDocument(emb, store, bus), AnswerQuestion(EchoContextModel(), emb, store)
+    return (
+        store,
+        bus,
+        emb,
+        IndexDocument(emb, store, bus),
+        AnswerQuestion(EchoContextModel(), emb, store),
+    )
 
 
 @pytest.mark.asyncio
@@ -50,7 +56,12 @@ def test_reindex_removes_old_chunks_and_publishes_event():
 def test_api_flow_metrics_and_request_id():
     store, bus, emb, _, _ = _stack()
     client = TestClient(create_app(EchoContextModel(), emb, store, bus))
-    assert client.post("/documents", json={"id": "d", "text": "reembolso em sete dias", "source": "p"}).status_code == 201
+    assert (
+        client.post(
+            "/documents", json={"id": "d", "text": "reembolso em sete dias", "source": "p"}
+        ).status_code
+        == 201
+    )
     r = client.post("/ask", json={"question": "reembolso"}, headers={"x-request-id": "abc"})
     assert r.json()["grounded"] is True and r.headers["x-request-id"] == "abc"
     assert client.post("/ask", json={"question": ""}).status_code == 422

@@ -1,7 +1,8 @@
 """Modelos de domínio: dataclasses puras, sem dependência de framework."""
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ class Citation:
 @dataclass(frozen=True)
 class Answer:
     text: str
-    citations: List[Citation]
+    citations: list[Citation]
     grounded: bool  # False quando nada relevante foi recuperado
 
 
@@ -53,7 +54,7 @@ class ToolSpec:
 
     name: str
     description: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     handler: Callable[..., Awaitable[Any]]
 
 
@@ -61,16 +62,16 @@ class ToolSpec:
 class ToolCall:
     id: str
     name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
 
 
 @dataclass
 class AgentMessage:
     role: str  # system | user | assistant | tool
     content: str = ""
-    tool_calls: List[ToolCall] = field(default_factory=list)
-    tool_call_id: Optional[str] = None
-    name: Optional[str] = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_call_id: str | None = None
+    name: str | None = None
 
 
 @dataclass
@@ -79,4 +80,4 @@ class AgentResult:
     iterations: int
     tool_calls_executed: int
     stopped_by: str  # concluded | max_iterations | budget
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)

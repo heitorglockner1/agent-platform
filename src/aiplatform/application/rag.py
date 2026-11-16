@@ -7,7 +7,7 @@ Decisões:
 * Re-indexar um documento apaga os chunks antigos antes (sem fantasmas).
 """
 
-from typing import List, Sequence
+from collections.abc import Sequence
 
 from aiplatform.application.ports import (
     ChatModelPort,
@@ -20,17 +20,17 @@ from aiplatform.domain.models import AgentMessage, Answer, Chunk, Citation, Docu
 NO_CONTEXT_REPLY = "Não encontrei isso nos documentos indexados."
 
 
-def chunk_text(text: str, size: int = 800, overlap: int = 100) -> List[str]:
+def chunk_text(text: str, size: int = 800, overlap: int = 100) -> list[str]:
     """Janela por palavras, ~`size` caracteres, com `overlap` de sobreposição."""
-    chunks: List[str] = []
-    current: List[str] = []
+    chunks: list[str] = []
+    current: list[str] = []
     length = 0
     for word in text.split():
         current.append(word)
         length += len(word) + 1
         if length >= size:
             chunks.append(" ".join(current))
-            keep: List[str] = []
+            keep: list[str] = []
             back = 0
             for w in reversed(current):
                 back += len(w) + 1

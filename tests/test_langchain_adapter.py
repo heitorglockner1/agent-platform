@@ -21,7 +21,9 @@ class StubChat:
 
     async def ainvoke(self, messages):
         self.seen = messages
-        return AIMessage(content="", tool_calls=[{"id": "c1", "name": "lookup", "args": {"q": "x"}}])
+        return AIMessage(
+            content="", tool_calls=[{"id": "c1", "name": "lookup", "args": {"q": "x"}}]
+        )
 
 
 async def _noop(**_):

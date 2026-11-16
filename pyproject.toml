@@ -17,10 +17,18 @@ dependencies = [
 [project.optional-dependencies]
 langchain = ["langchain-core>=0.3", "langchain-openai>=0.2"]
 chroma = ["chromadb>=0.5"]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-cov>=5", "httpx>=0.28", "langchain-core>=0.3"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-cov>=5", "httpx>=0.28", "langchain-core>=0.3", "ruff>=0.6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.coverage.run]
 omit = ["*/main.py", "*/chroma_store.py"]  # composição e adaptador opcional

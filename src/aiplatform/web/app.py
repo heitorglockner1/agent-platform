@@ -5,13 +5,23 @@ import logging
 import time
 import uuid
 from contextvars import ContextVar
-from typing import Optional
 
 from fastapi import FastAPI, Request, Response
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel, Field
-from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Counter, Histogram, generate_latest
 
-from aiplatform.application.ports import ChatModelPort, EmbedderPort, EventPublisherPort, VectorStorePort
+from aiplatform.application.ports import (
+    ChatModelPort,
+    EmbedderPort,
+    EventPublisherPort,
+    VectorStorePort,
+)
 from aiplatform.application.rag import AnswerQuestion, IndexDocument
 from aiplatform.domain.models import Document
 
@@ -42,10 +52,12 @@ def create_app(
     embedder: EmbedderPort,
     store: VectorStorePort,
     events: EventPublisherPort,
-    registry: Optional[CollectorRegistry] = None,
+    registry: CollectorRegistry | None = None,
 ) -> FastAPI:
     registry = registry or CollectorRegistry()
-    requests_total = Counter("http_requests_total", "Requisições", ["path", "status"], registry=registry)
+    requests_total = Counter(
+        "http_requests_total", "Requisições", ["path", "status"], registry=registry
+    )
     latency = Histogram("http_request_seconds", "Latência", ["path"], registry=registry)
     log = logging.getLogger("aiplatform")
 

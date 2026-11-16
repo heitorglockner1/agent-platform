@@ -6,7 +6,8 @@ provedor (OpenAI, Bedrock, LangChain) fica só no adaptador.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from aiplatform.domain.models import AgentMessage, Chunk, ScoredChunk, ToolSpec
 
@@ -21,15 +22,15 @@ class ChatModelPort(ABC):
 
 class EmbedderPort(ABC):
     @abstractmethod
-    def embed(self, texts: Sequence[str]) -> List[List[float]]: ...
+    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
 
 class VectorStorePort(ABC):
     @abstractmethod
-    def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[List[float]]) -> None: ...
+    def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[list[float]]) -> None: ...
 
     @abstractmethod
-    def search(self, vector: List[float], top_k: int) -> List[ScoredChunk]: ...
+    def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]: ...
 
     @abstractmethod
     def delete_document(self, document_id: str) -> None: ...
@@ -39,7 +40,7 @@ class EventPublisherPort(ABC):
     """Mensageria. Adaptadores possíveis: em memória, SQS, Kafka, RabbitMQ."""
 
     @abstractmethod
-    def publish(self, topic: str, payload: Dict[str, Any]) -> None: ...
+    def publish(self, topic: str, payload: dict[str, Any]) -> None: ...
 
 
 class BudgetPort(ABC):
@@ -54,4 +55,4 @@ class Tracer(ABC):
     """Observabilidade de chamadas de LLM (Langfuse, OpenTelemetry...)."""
 
     @abstractmethod
-    def event(self, name: str, **attrs: Optional[Any]) -> None: ...
+    def event(self, name: str, **attrs: Any | None) -> None: ...

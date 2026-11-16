@@ -7,7 +7,8 @@ OpenSearch, SQS, Bedrock): a mesma suíte de testes vale para todos.
 import hashlib
 import math
 import re
-from typing import Any, Dict, List, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from aiplatform.application.ports import EmbedderPort, EventPublisherPort, VectorStorePort
 from aiplatform.domain.models import Chunk, ScoredChunk
@@ -18,11 +19,11 @@ _DIM = 256
 class HashingEmbedder(EmbedderPort):
     """Bag-of-words por hashing, normalizado. Determinístico e offline."""
 
-    def embed(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
         return [self._one(t) for t in texts]
 
     @staticmethod
-    def _one(text: str) -> List[float]:
+    def _one(text: str) -> list[float]:
         vec = [0.0] * _DIM
         for tok in re.findall(r"\w{3,}", text.lower()):  # sem palavras funcionais curtas
             h = int(hashlib.md5(tok.encode()).hexdigest(), 16)
@@ -33,15 +34,16 @@ class HashingEmbedder(EmbedderPort):
 
 class InMemoryVectorStore(VectorStorePort):
     def __init__(self) -> None:
-        self._rows: Dict[str, Tuple[Chunk, List[float]]] = {}
+        self._rows: dict[str, tuple[Chunk, list[float]]] = {}
 
-    def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[List[float]]) -> None:
-        for chunk, vec in zip(chunks, vectors):
+    def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[list[float]]) -> None:
+        for chunk, vec in zip(chunks, vectors, strict=True):
             self._rows[chunk.id] = (chunk, vec)
 
-    def search(self, vector: List[float], top_k: int) -> List[ScoredChunk]:
+    def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]:
         scored = [
-            ScoredChunk(c, sum(a * b for a, b in zip(vector, v))) for c, v in self._rows.values()
+            ScoredChunk(c, sum(a * b for a, b in zip(vector, v, strict=True)))
+            for c, v in self._rows.values()
         ]
         return sorted(scored, key=lambda s: s.score, reverse=True)[:top_k]
 
@@ -52,7 +54,7 @@ class InMemoryVectorStore(VectorStorePort):
 
 class InMemoryEventBus(EventPublisherPort):
     def __init__(self) -> None:
-        self.published: List[Tuple[str, Dict[str, Any]]] = []
+        self.published: list[tuple[str, dict[str, Any]]] = []
 
-    def publish(self, topic: str, payload: Dict[str, Any]) -> None:
+    def publish(self, topic: str, payload: dict[str, Any]) -> None:
         self.published.append((topic, payload))

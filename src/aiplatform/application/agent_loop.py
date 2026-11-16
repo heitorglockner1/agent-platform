@@ -14,7 +14,7 @@ Lições de produção embutidas aqui (ver docs/LEARNINGS.md):
 
 import json
 import time
-from typing import Dict, List, Optional, Sequence, Set
+from collections.abc import Sequence
 
 from aiplatform.application.ports import BudgetPort, ChatModelPort, Tracer
 from aiplatform.domain.models import AgentMessage, AgentResult, ToolCall, ToolSpec
@@ -26,7 +26,7 @@ def _truncate(text: str, limit: int) -> str:
     return text[:limit] + f"... [cortado: {len(text) - limit} caracteres]"
 
 
-def _footer(executed: List[str], errors: List[str]) -> str:
+def _footer(executed: list[str], errors: list[str]) -> str:
     done = ", ".join(executed) if executed else "nenhuma"
     line = f"\n\n[executado de fato: {done}"
     if errors:
@@ -34,7 +34,7 @@ def _footer(executed: List[str], errors: List[str]) -> str:
     return line + "]"
 
 
-async def _run_tool(call: ToolCall, specs: Dict[str, ToolSpec], cap: int) -> str:
+async def _run_tool(call: ToolCall, specs: dict[str, ToolSpec], cap: int) -> str:
     spec = specs.get(call.name)
     if spec is None:
         return f"ERRO: ferramenta desconhecida '{call.name}'."
@@ -52,17 +52,17 @@ async def run_agent(
     *,
     max_iterations: int = 6,
     tool_result_cap: int = 4000,
-    budget: Optional[BudgetPort] = None,
-    tracer: Optional[Tracer] = None,
+    budget: BudgetPort | None = None,
+    tracer: Tracer | None = None,
 ) -> AgentResult:
     specs = {t.name: t for t in tools}
     history = [
         AgentMessage(role="system", content=system_prompt),
         AgentMessage(role="user", content=user_prompt),
     ]
-    seen: Set[str] = set()
-    executed: List[str] = []
-    errors: List[str] = []
+    seen: set[str] = set()
+    executed: list[str] = []
+    errors: list[str] = []
 
     for turn in range(1, max_iterations + 1):
         if budget is not None and not budget.allows_next_call():
@@ -102,7 +102,7 @@ async def run_agent(
 
 
 def _finish(
-    history: List[AgentMessage], turns: int, executed: List[str], errors: List[str], reason: str
+    history: list[AgentMessage], turns: int, executed: list[str], errors: list[str], reason: str
 ) -> AgentResult:
     last = next((m.content for m in reversed(history) if m.role == "assistant" and m.content), "")
     return AgentResult(last + _footer(executed, errors), turns, len(executed), reason, errors)

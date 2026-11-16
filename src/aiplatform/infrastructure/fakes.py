@@ -1,15 +1,15 @@
 """Modelo de chat roteirizado: respostas pré-definidas, para testes e demo."""
 
-from typing import List, Sequence
+from collections.abc import Sequence
 
 from aiplatform.application.ports import BudgetPort, ChatModelPort
 from aiplatform.domain.models import AgentMessage, ToolSpec
 
 
 class ScriptedChatModel(ChatModelPort):
-    def __init__(self, replies: List[AgentMessage]) -> None:
+    def __init__(self, replies: list[AgentMessage]) -> None:
         self._replies = list(replies)
-        self.calls: List[dict] = []  # o que o modelo recebeu, para asserções
+        self.calls: list[dict] = []  # o que o modelo recebeu, para asserções
 
     async def complete(
         self, messages: Sequence[AgentMessage], tools: Sequence[ToolSpec]
