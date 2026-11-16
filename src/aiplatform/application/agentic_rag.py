@@ -26,6 +26,8 @@ SEARCH_SCHEMA: dict[str, Any] = {
 
 @dataclass(frozen=True)
 class AgentLimits:
+    """Tetos de uma execução: voltas, tokens e tamanho do retorno de ferramenta."""
+
     max_iterations: int = 4
     max_tokens: int = 20_000
     tool_result_cap: int = 6_000
@@ -35,6 +37,8 @@ DEFAULT_LIMITS = AgentLimits()
 
 
 class AnswerWithAgent:
+    """Caso de uso: agente com uma única ferramenta, a busca nos documentos."""
+
     def __init__(
         self,
         model: ChatModelPort,
@@ -42,8 +46,10 @@ class AnswerWithAgent:
         limits: AgentLimits = DEFAULT_LIMITS,
         tracer: Tracer | None = None,
     ) -> None:
-        self._model, self._retrieve = model, retrieve
-        self._limits, self._tracer = limits, tracer
+        self._model = model
+        self._retrieve = retrieve
+        self._limits = limits
+        self._tracer = tracer
         self._search = ToolSpec(
             "search_documents",
             "Busca trechos relevantes nos documentos indexados.",
@@ -52,6 +58,7 @@ class AnswerWithAgent:
         )
 
     async def _search_documents(self, query: str) -> list[dict[str, Any]]:
+        """Handler da ferramenta: lista vazia quando nada passa do limiar."""
         return [
             {
                 "chunk_id": h.chunk.id,

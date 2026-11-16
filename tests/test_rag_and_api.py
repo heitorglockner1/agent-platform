@@ -52,46 +52,53 @@ def test_empty_text_has_no_chunks():
     assert chunk_text("   ") == []
 
 
-def _stack():
-    store, bus, emb = InMemoryVectorStore(), InMemoryEventBus(), HashingEmbedder()
-    return (
-        store,
-        bus,
-        emb,
-        IndexDocument(emb, store, bus),
-        AnswerQuestion(DemoChatModel(), Retriever(emb, store)),
-    )
+POLICY = "O prazo de reembolso é de sete dias corridos."
+
+
+class Stack:
+    """Adaptadores locais e os dois casos de uso de RAG ligados a eles."""
+
+    def __init__(self):
+        self.store = InMemoryVectorStore()
+        self.bus = InMemoryEventBus()
+        self.embedder = HashingEmbedder()
+        self.index = IndexDocument(self.embedder, self.store, self.bus)
+        self.ask = AnswerQuestion(DemoChatModel(), Retriever(self.embedder, self.store))
+
+    async def texts_near(self, query):
+        [vector] = await self.embedder.embed([query])
+        return [hit.chunk.text for hit in await self.store.search(vector, 10)]
 
 
 async def test_answer_has_citations_from_retrieval():
-    _, _, _, index, ask = _stack()
-    await index(Document("d1", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
-    await index(Document("d2", "A empresa foi fundada em 1995 em Porto Alegre.", "sobre.md"))
-    a = await ask("qual o prazo de reembolso")
+    stack = Stack()
+    await stack.index(Document("d1", POLICY, "politica.md"))
+    await stack.index(Document("d2", "A empresa foi fundada em 1995 em Porto Alegre.", "sobre.md"))
+    a = await stack.ask("qual o prazo de reembolso")
     assert a.grounded and a.citations[0].source == "politica.md"
 
 
 async def test_demo_model_answers_with_the_retrieved_text():
-    _, _, _, index, ask = _stack()
-    await index(Document("pol", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
-    a = await ask("qual o prazo de reembolso?")
-    assert a.text == "O prazo de reembolso é de sete dias corridos."
+    stack = Stack()
+    await stack.index(Document("pol", POLICY, "politica.md"))
+    a = await stack.ask("qual o prazo de reembolso?")
+    assert a.text == POLICY
 
 
 async def test_refuses_instead_of_inventing_when_nothing_relevant():
-    _, _, _, index, ask = _stack()
-    await index(Document("d1", "O prazo de reembolso é de sete dias.", "politica.md"))
-    a = await ask("receita de bolo de cenoura")
+    stack = Stack()
+    await stack.index(Document("d1", "O prazo de reembolso é de sete dias.", "politica.md"))
+    a = await stack.ask("receita de bolo de cenoura")
     assert not a.grounded and a.text == NO_CONTEXT_REPLY
 
 
 async def test_reindex_removes_old_chunks_and_publishes_event():
-    store, bus, emb, index, _ = _stack()
-    await index(Document("d1", "alfa beta gama", "a"))
-    await index(Document("d1", "totalmente diferente agora", "a"))
-    texts = [s.chunk.text for s in await store.search((await emb.embed(["alfa"]))[0], 10)]
+    stack = Stack()
+    await stack.index(Document("d1", "alfa beta gama", "a"))
+    await stack.index(Document("d1", "totalmente diferente agora", "a"))
+    texts = await stack.texts_near("alfa")
     assert texts == ["totalmente diferente agora"]
-    assert [t for t, _ in bus.published] == ["document.indexed"] * 2
+    assert [t for t, _ in stack.bus.published] == ["document.indexed"] * 2
 
 
 class FailingEmbedder(HashingEmbedder):
@@ -100,17 +107,19 @@ class FailingEmbedder(HashingEmbedder):
 
 
 async def test_reindex_keeps_old_version_when_embedding_fails():
-    store, bus, emb, index, _ = _stack()
-    await index(Document("d1", "alfa beta gama", "a"))
+    stack = Stack()
+    await stack.index(Document("d1", "alfa beta gama", "a"))
     with pytest.raises(RuntimeError):
-        await IndexDocument(FailingEmbedder(), store, bus)(Document("d1", "versão nova", "a"))
-    texts = [s.chunk.text for s in await store.search((await emb.embed(["alfa"]))[0], 10)]
+        await IndexDocument(FailingEmbedder(), stack.store, stack.bus)(
+            Document("d1", "versão nova", "a")
+        )
+    texts = await stack.texts_near("alfa")
     assert texts == ["alfa beta gama"]
 
 
 def test_api_flow_metrics_and_request_id():
-    store, bus, emb, _, _ = _stack()
-    client = TestClient(create_app(DemoChatModel(), emb, store, bus))
+    stack = Stack()
+    client = TestClient(create_app(DemoChatModel(), stack.embedder, stack.store, stack.bus))
     assert (
         client.post(
             "/documents", json={"id": "d", "text": "reembolso em sete dias", "source": "p"}

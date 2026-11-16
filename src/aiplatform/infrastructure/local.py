@@ -25,16 +25,21 @@ class HashingEmbedder(EmbedderPort):
 
     @staticmethod
     def _one(text: str) -> list[float]:
-        vec = [0.0] * _DIM
-        for tok in re.findall(r"\w{3,}", text.lower()):  # sem palavras funcionais curtas
-            h = int(hashlib.md5(tok.encode()).hexdigest(), 16)
-            vec[h % _DIM] += 1.0
-        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
-        return [v / norm for v in vec]
+        vector = [0.0] * _DIM
+        # Tokens de 3+ letras: "de" e "o" faziam perguntas sem relação casarem (LEARNINGS).
+        for token in re.findall(r"\w{3,}", text.lower()):
+            bucket = int(hashlib.md5(token.encode()).hexdigest(), 16) % _DIM
+            vector[bucket] += 1.0
+        norm = math.sqrt(sum(v * v for v in vector)) or 1.0
+        return [v / norm for v in vector]
 
 
 class InMemoryVectorStore(VectorStorePort):
-    # Métodos async sem await: cada operação roda inteira no event loop, sem corrida.
+    """Store em memória. Perde os dados ao reiniciar.
+
+    Métodos async sem await: cada operação roda inteira no event loop, então não
+    há corrida entre requisições e não é preciso lock.
+    """
 
     def __init__(self) -> None:
         self._rows: dict[str, tuple[Chunk, list[float]]] = {}
@@ -44,18 +49,23 @@ class InMemoryVectorStore(VectorStorePort):
             self._rows[chunk.id] = (chunk, vec)
 
     async def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]:
-        scored = [
-            ScoredChunk(c, sum(a * b for a, b in zip(vector, v, strict=True)))
-            for c, v in self._rows.values()
-        ]
+        scored = [ScoredChunk(chunk, _dot(vector, stored)) for chunk, stored in self._rows.values()]
         return sorted(scored, key=lambda s: s.score, reverse=True)[:top_k]
 
     async def delete_document(self, document_id: str) -> None:
-        for key in [k for k, (c, _) in self._rows.items() if c.document_id == document_id]:
+        doomed = [key for key, (chunk, _) in self._rows.items() if chunk.document_id == document_id]
+        for key in doomed:
             del self._rows[key]
 
 
+def _dot(a: list[float], b: list[float]) -> float:
+    """Com vetores normalizados, o produto escalar é a similaridade de cosseno."""
+    return sum(x * y for x, y in zip(a, b, strict=True))
+
+
 class InMemoryEventBus(EventPublisherPort):
+    """Guarda os últimos eventos publicados. Não há consumidor: serve para teste e demo."""
+
     def __init__(self) -> None:
         self.published: deque[tuple[str, dict[str, Any]]] = deque(maxlen=1000)
 

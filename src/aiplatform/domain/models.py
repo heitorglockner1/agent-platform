@@ -11,6 +11,8 @@ ToolHandler = Callable[..., Awaitable[Any]]
 
 @dataclass(frozen=True)
 class Document:
+    """Texto a indexar. `source` é o que aparece na citação (ex.: nome do arquivo)."""
+
     id: str
     text: str
     source: str = ""
@@ -18,6 +20,8 @@ class Document:
 
 @dataclass(frozen=True)
 class Chunk:
+    """Trecho de um documento; a unidade que é indexada e recuperada."""
+
     document_id: str
     index: int
     text: str
@@ -30,12 +34,16 @@ class Chunk:
 
 @dataclass(frozen=True)
 class ScoredChunk:
+    """Trecho recuperado com a similaridade da busca (1.0 é idêntico)."""
+
     chunk: Chunk
     score: float
 
 
 @dataclass(frozen=True)
 class Citation:
+    """Fonte de uma resposta, montada pelo código a partir da recuperação."""
+
     chunk_id: str
     source: str
     score: float
@@ -43,9 +51,11 @@ class Citation:
 
 @dataclass(frozen=True)
 class Answer:
+    """Resposta do RAG. `grounded` é False quando nada passou do limiar."""
+
     text: str
     citations: tuple[Citation, ...]
-    grounded: bool  # False quando nada relevante foi recuperado
+    grounded: bool
 
 
 @dataclass(frozen=True)
@@ -64,6 +74,8 @@ class ToolSpec:
 
 @dataclass(frozen=True)
 class ToolCall:
+    """Pedido do modelo para executar uma ferramenta com estes argumentos."""
+
     id: str
     name: str
     arguments: dict[str, Any]
@@ -71,6 +83,8 @@ class ToolCall:
 
 @dataclass(frozen=True)
 class TokenUsage:
+    """Tokens consumidos numa chamada ao modelo, como o provedor informou."""
+
     input_tokens: int = 0
     output_tokens: int = 0
 
@@ -81,6 +95,8 @@ class TokenUsage:
 
 @dataclass
 class AgentMessage:
+    """Uma mensagem do histórico, em formato neutro de provedor."""
+
     role: Role
     content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
@@ -91,6 +107,8 @@ class AgentMessage:
 
 @dataclass
 class AgentResult:
+    """Desfecho de uma execução do agente, com o que de fato foi executado."""
+
     final_text: str
     iterations: int
     tool_calls_executed: int

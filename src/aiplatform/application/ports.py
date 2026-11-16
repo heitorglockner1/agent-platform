@@ -37,14 +37,19 @@ class EmbedderPort(ABC):
 
 
 class VectorStorePort(ABC):
-    @abstractmethod
-    async def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[list[float]]) -> None: ...
+    """Banco vetorial. A similaridade devolvida vai de 0 a 1 (1 é idêntico)."""
 
     @abstractmethod
-    async def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]: ...
+    async def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[list[float]]) -> None:
+        """Grava ou substitui cada trecho pelo seu `Chunk.id`."""
 
     @abstractmethod
-    async def delete_document(self, document_id: str) -> None: ...
+    async def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]:
+        """Os `top_k` trechos mais parecidos, do mais para o menos parecido."""
+
+    @abstractmethod
+    async def delete_document(self, document_id: str) -> None:
+        """Remove todos os trechos do documento."""
 
 
 class EventPublisherPort(ABC):
@@ -55,6 +60,8 @@ class EventPublisherPort(ABC):
 
 
 class BudgetPort(ABC):
+    """Teto de custo de uma execução, consultado antes de cada chamada ao modelo."""
+
     @abstractmethod
     def allows_next_call(self) -> bool: ...
 

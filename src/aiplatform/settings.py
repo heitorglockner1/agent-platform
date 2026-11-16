@@ -13,6 +13,7 @@ _N = TypeVar("_N", int, float)
 
 
 def _choice(environ: Mapping[str, str], name: str, allowed: tuple[str, ...], default: str) -> str:
+    """Valor da variável, recusando o que não estiver em `allowed`."""
     value = environ.get(name, default)
     if value not in allowed:
         raise ValueError(f"{name}={value!r} inválido; aceitos: {', '.join(allowed)}")
@@ -20,6 +21,7 @@ def _choice(environ: Mapping[str, str], name: str, allowed: tuple[str, ...], def
 
 
 def _number(environ: Mapping[str, str], name: str, parse: Callable[[str], _N], default: _N) -> _N:
+    """Valor numérico da variável, com erro que diz qual variável está errada."""
     raw = environ.get(name)
     if raw is None:
         return default
@@ -31,6 +33,8 @@ def _number(environ: Mapping[str, str], name: str, parse: Callable[[str], _N], d
 
 @dataclass(frozen=True)
 class Settings:
+    """Toda a configuração da aplicação. Os padrões rodam sem chave e sem rede."""
+
     llm: LlmKind = "demo"
     llm_model: str = "gpt-4o-mini"
     llm_timeout_s: float = 30.0

@@ -23,6 +23,7 @@ from aiplatform.domain.models import AgentMessage, Answer, Chunk, Citation, Docu
 CONTEXT_HEADER = "CONTEXTO:"
 QUESTION_HEADER = "PERGUNTA:"
 NO_CONTEXT_REPLY = "Não encontrei isso nos documentos indexados."
+GROUNDING_INSTRUCTION = "Responda só com base no CONTEXTO. Se não estiver nele, diga que não sabe."
 
 
 def _tail(words: list[str], overlap: int) -> list[str]:
@@ -67,6 +68,8 @@ def chunk_text(text: str, size: int = 800, overlap: int = 100) -> list[str]:
 
 
 class IndexDocument:
+    """Caso de uso: quebra o documento em trechos, gera embeddings e indexa."""
+
     def __init__(
         self,
         embedder: EmbedderPort,
@@ -75,11 +78,15 @@ class IndexDocument:
         chunk_size: int = 800,
         overlap: int = 100,
     ) -> None:
-        self._embedder, self._store, self._events = embedder, store, events
-        self._size, self._overlap = chunk_size, overlap
+        self._embedder = embedder
+        self._store = store
+        self._events = events
+        self._chunk_size = chunk_size
+        self._overlap = overlap
 
     async def __call__(self, doc: Document) -> int:
-        pieces = chunk_text(doc.text, self._size, self._overlap)
+        """Indexa (ou reindexa) o documento e devolve quantos trechos ele gerou."""
+        pieces = chunk_text(doc.text, self._chunk_size, self._overlap)
         chunks = [Chunk(doc.id, i, t, doc.source) for i, t in enumerate(pieces)]
         # Embeddings antes de apagar: se o provedor falhar, a versão antiga continua.
         vectors = await self._embedder.embed([c.text for c in chunks]) if chunks else []
@@ -103,10 +110,14 @@ class Retriever:
         min_score: float = 0.2,
         tracer: Tracer | None = None,
     ) -> None:
-        self._embedder, self._store, self._tracer = embedder, store, tracer
-        self._top_k, self._min_score = top_k, min_score
+        self._embedder = embedder
+        self._store = store
+        self._top_k = top_k
+        self._min_score = min_score
+        self._tracer = tracer
 
     async def __call__(self, query: str) -> list[ScoredChunk]:
+        """Trechos relevantes para `query`, do mais para o menos parecido."""
         [vector] = await self._embedder.embed([query])
         found = await self._store.search(vector, self._top_k)
         hits = [h for h in found if h.score >= self._min_score]
@@ -118,24 +129,26 @@ class Retriever:
 
 
 class AnswerQuestion:
+    """Caso de uso: pipeline de RAG com recusa abaixo do limiar e citações do código."""
+
     def __init__(self, model: ChatModelPort, retrieve: Retriever) -> None:
-        self._model, self._retrieve = model, retrieve
+        self._model = model
+        self._retrieve = retrieve
 
     async def __call__(self, question: str) -> Answer:
         hits = await self._retrieve(question)
         if not hits:
-            return Answer(NO_CONTEXT_REPLY, (), grounded=False)
+            return Answer(NO_CONTEXT_REPLY, (), grounded=False)  # o modelo nem é chamado
 
-        context = "\n\n".join(f"[{h.chunk.id}] {h.chunk.text}" for h in hits)
-        messages: Sequence[AgentMessage] = [
-            AgentMessage(
-                role="system",
-                content="Responda só com base no CONTEXTO. Se não estiver nele, diga que não sabe.",
-            ),
-            AgentMessage(
-                role="user", content=f"{CONTEXT_HEADER}\n{context}\n\n{QUESTION_HEADER} {question}"
-            ),
-        ]
-        reply = await self._model.complete(messages, [])
+        reply = await self._model.complete(grounded_prompt(question, hits), [])
         citations = tuple(Citation(h.chunk.id, h.chunk.source, round(h.score, 4)) for h in hits)
         return Answer(reply.content, citations, grounded=True)
+
+
+def grounded_prompt(question: str, hits: Sequence[ScoredChunk]) -> list[AgentMessage]:
+    """Prompt que restringe o modelo aos trechos recuperados, cada um com seu id."""
+    context = "\n\n".join(f"[{h.chunk.id}] {h.chunk.text}" for h in hits)
+    return [
+        AgentMessage("system", GROUNDING_INSTRUCTION),
+        AgentMessage("user", f"{CONTEXT_HEADER}\n{context}\n\n{QUESTION_HEADER} {question}"),
+    ]

@@ -4,6 +4,8 @@ from aiplatform.application.ports import BudgetPort
 
 
 class TokenBudget(BudgetPort):
+    """Permite chamadas enquanto sobrar saldo; a última pode estourar o teto."""
+
     def __init__(self, max_tokens: int) -> None:
         self._left = max_tokens
 

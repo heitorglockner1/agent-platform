@@ -76,7 +76,7 @@ docker run -p 8000:8000 agent-platform
 domain/          dataclasses puras (Document, Chunk, Answer, ToolSpec, AgentMessage...)
 application/     ports.py (interfaces), rag.py, agent_loop.py, agentic_rag.py, budget.py
 infrastructure/  adaptadores: local (memória), demo, Chroma, LangChain (chat e embeddings)
-web/             FastAPI: rotas finas, middleware de métricas e request id
+web/             FastAPI: app (montagem), routes, schemas, middleware, metrics
 settings.py      configuração do ambiente
 observability.py log JSON e tracer
 main.py          composição: escolhe os adaptadores a partir de Settings

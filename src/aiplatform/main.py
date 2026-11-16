@@ -53,6 +53,7 @@ def _embedder(settings: Settings) -> EmbedderPort:
 
 
 def build_app(settings: Settings) -> FastAPI:
+    """Escolhe os adaptadores a partir da configuração e monta a API."""
     return create_app(
         _model(settings),
         _embedder(settings),

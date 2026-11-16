@@ -31,6 +31,7 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging() -> None:
+    """Liga o log JSON no logger `aiplatform`. Chamar de novo não duplica o handler."""
     logger = logging.getLogger("aiplatform")
     if any(isinstance(h.formatter, JsonFormatter) for h in logger.handlers):
         return

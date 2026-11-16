@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 
 def _to_lc(messages: Sequence[AgentMessage]) -> list["BaseMessage"]:
+    """Histórico neutro para as classes de mensagem do LangChain."""
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
     out: list[BaseMessage] = []
@@ -51,6 +52,7 @@ def _text(content: str | list[str | dict[str, Any]]) -> str:
 
 
 def _tool_schema(spec: ToolSpec) -> dict[str, Any]:
+    """Formato de ferramenta da OpenAI, que o `bind_tools` aceita para todo provedor."""
     return {
         "type": "function",
         "function": {
@@ -62,6 +64,8 @@ def _tool_schema(spec: ToolSpec) -> dict[str, Any]:
 
 
 class LangChainChatModel(ChatModelPort):
+    """Uma volta de conversa via LangChain, com timeout e erro de provedor tipado."""
+
     def __init__(self, chat_model: "BaseChatModel", timeout_s: float = 30.0) -> None:
         self._chat = chat_model
         self._timeout_s = timeout_s
@@ -76,13 +80,16 @@ class LangChainChatModel(ChatModelPort):
                 reply = await runnable.ainvoke(_to_lc(messages))
         except Exception as exc:
             raise ProviderUnavailableError(f"{type(exc).__name__}: {exc}") from exc
-        # Sem id a mensagem `tool` seguinte não teria com o que se correlacionar.
-        calls = [
-            ToolCall(c["id"] or uuid4().hex, c["name"], c["args"])
-            for c in (getattr(reply, "tool_calls", None) or [])
-        ]
-        meta = getattr(reply, "usage_metadata", None)
-        usage = TokenUsage(meta["input_tokens"], meta["output_tokens"]) if meta else None
-        return AgentMessage(
-            role="assistant", content=_text(reply.content), tool_calls=calls, usage=usage
-        )
+        return _from_lc(reply)
+
+
+def _from_lc(reply: Any) -> AgentMessage:
+    """Resposta do LangChain para o formato neutro: texto, pedidos de ferramenta e uso."""
+    # Sem id a mensagem `tool` seguinte não teria com o que se correlacionar.
+    calls = [
+        ToolCall(c["id"] or uuid4().hex, c["name"], c["args"])
+        for c in (getattr(reply, "tool_calls", None) or [])
+    ]
+    meta = getattr(reply, "usage_metadata", None)
+    usage = TokenUsage(meta["input_tokens"], meta["output_tokens"]) if meta else None
+    return AgentMessage("assistant", _text(reply.content), tool_calls=calls, usage=usage)
