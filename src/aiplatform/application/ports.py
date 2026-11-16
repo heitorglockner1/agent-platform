@@ -3,6 +3,9 @@
 Separar `ChatModelPort` (uma volta de conversa) do loop do agente deixa o loop
 nosso, legível e testável com um fake pequeno; o que depende do formato do
 provedor (OpenAI, Bedrock, LangChain) fica só no adaptador.
+
+Regra: porta que faz I/O de rede é assíncrona (chat, embeddings, banco vetorial,
+mensageria). `BudgetPort` e `Tracer` são locais e continuam síncronas.
 """
 
 from abc import ABC, abstractmethod
@@ -22,25 +25,25 @@ class ChatModelPort(ABC):
 
 class EmbedderPort(ABC):
     @abstractmethod
-    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
 
 class VectorStorePort(ABC):
     @abstractmethod
-    def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[list[float]]) -> None: ...
+    async def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[list[float]]) -> None: ...
 
     @abstractmethod
-    def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]: ...
+    async def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]: ...
 
     @abstractmethod
-    def delete_document(self, document_id: str) -> None: ...
+    async def delete_document(self, document_id: str) -> None: ...
 
 
 class EventPublisherPort(ABC):
     """Mensageria. Adaptadores possíveis: em memória, SQS, Kafka, RabbitMQ."""
 
     @abstractmethod
-    def publish(self, topic: str, payload: dict[str, Any]) -> None: ...
+    async def publish(self, topic: str, payload: dict[str, Any]) -> None: ...
 
 
 class BudgetPort(ABC):

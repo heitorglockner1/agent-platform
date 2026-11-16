@@ -80,8 +80,8 @@ def create_app(
         return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
     @app.post("/documents", status_code=201)
-    def post_document(body: IndexRequest) -> dict[str, Any]:
-        n = index_document(Document(body.id, body.text, body.source))
+    async def post_document(body: IndexRequest) -> dict[str, Any]:
+        n = await index_document(Document(body.id, body.text, body.source))
         return {"document_id": body.id, "chunks": n}
 
     @app.post("/ask")

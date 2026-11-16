@@ -59,46 +59,46 @@ def _stack():
 
 async def test_answer_has_citations_from_retrieval():
     _, _, _, index, ask = _stack()
-    index(Document("d1", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
-    index(Document("d2", "A empresa foi fundada em 1995 em Porto Alegre.", "sobre.md"))
+    await index(Document("d1", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
+    await index(Document("d2", "A empresa foi fundada em 1995 em Porto Alegre.", "sobre.md"))
     a = await ask("qual o prazo de reembolso")
     assert a.grounded and a.citations[0].source == "politica.md"
 
 
 async def test_demo_model_answers_with_the_retrieved_text():
     _, _, _, index, ask = _stack()
-    index(Document("pol", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
+    await index(Document("pol", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
     a = await ask("qual o prazo de reembolso?")
     assert a.text == "O prazo de reembolso é de sete dias corridos."
 
 
 async def test_refuses_instead_of_inventing_when_nothing_relevant():
     _, _, _, index, ask = _stack()
-    index(Document("d1", "O prazo de reembolso é de sete dias.", "politica.md"))
+    await index(Document("d1", "O prazo de reembolso é de sete dias.", "politica.md"))
     a = await ask("receita de bolo de cenoura")
     assert not a.grounded and a.text == NO_CONTEXT_REPLY
 
 
-def test_reindex_removes_old_chunks_and_publishes_event():
+async def test_reindex_removes_old_chunks_and_publishes_event():
     store, bus, emb, index, _ = _stack()
-    index(Document("d1", "alfa beta gama", "a"))
-    index(Document("d1", "totalmente diferente agora", "a"))
-    texts = [s.chunk.text for s in store.search(emb.embed(["alfa"])[0], 10)]
+    await index(Document("d1", "alfa beta gama", "a"))
+    await index(Document("d1", "totalmente diferente agora", "a"))
+    texts = [s.chunk.text for s in await store.search((await emb.embed(["alfa"]))[0], 10)]
     assert texts == ["totalmente diferente agora"]
     assert [t for t, _ in bus.published] == ["document.indexed"] * 2
 
 
 class FailingEmbedder(HashingEmbedder):
-    def embed(self, texts):
+    async def embed(self, texts):
         raise RuntimeError("provedor fora do ar")
 
 
-def test_reindex_keeps_old_version_when_embedding_fails():
+async def test_reindex_keeps_old_version_when_embedding_fails():
     store, bus, emb, index, _ = _stack()
-    index(Document("d1", "alfa beta gama", "a"))
+    await index(Document("d1", "alfa beta gama", "a"))
     with pytest.raises(RuntimeError):
-        IndexDocument(FailingEmbedder(), store, bus)(Document("d1", "versão nova", "a"))
-    texts = [s.chunk.text for s in store.search(emb.embed(["alfa"])[0], 10)]
+        await IndexDocument(FailingEmbedder(), store, bus)(Document("d1", "versão nova", "a"))
+    texts = [s.chunk.text for s in await store.search((await emb.embed(["alfa"]))[0], 10)]
     assert texts == ["alfa beta gama"]
 
 

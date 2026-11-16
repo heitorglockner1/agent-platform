@@ -75,15 +75,17 @@ class IndexDocument:
         self._embedder, self._store, self._events = embedder, store, events
         self._size, self._overlap = chunk_size, overlap
 
-    def __call__(self, doc: Document) -> int:
+    async def __call__(self, doc: Document) -> int:
         pieces = chunk_text(doc.text, self._size, self._overlap)
         chunks = [Chunk(doc.id, i, t, doc.source) for i, t in enumerate(pieces)]
         # Embeddings antes de apagar: se o provedor falhar, a versão antiga continua.
-        vectors = self._embedder.embed([c.text for c in chunks]) if chunks else []
-        self._store.delete_document(doc.id)
+        vectors = await self._embedder.embed([c.text for c in chunks]) if chunks else []
+        await self._store.delete_document(doc.id)
         if chunks:
-            self._store.upsert(chunks, vectors)
-        self._events.publish("document.indexed", {"document_id": doc.id, "chunks": len(chunks)})
+            await self._store.upsert(chunks, vectors)
+        await self._events.publish(
+            "document.indexed", {"document_id": doc.id, "chunks": len(chunks)}
+        )
         return len(chunks)
 
 
@@ -100,7 +102,8 @@ class AnswerQuestion:
         self._top_k, self._min_score = top_k, min_score
 
     async def __call__(self, question: str) -> Answer:
-        hits = self._store.search(self._embedder.embed([question])[0], self._top_k)
+        [vector] = await self._embedder.embed([question])
+        hits = await self._store.search(vector, self._top_k)
         hits = [h for h in hits if h.score >= self._min_score]
         if not hits:
             return Answer(NO_CONTEXT_REPLY, (), grounded=False)
