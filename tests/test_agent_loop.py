@@ -1,5 +1,3 @@
-import pytest
-
 from aiplatform.application.agent_loop import run_agent
 from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec
 from aiplatform.infrastructure.fakes import ScriptedChatModel, TokenBudget
@@ -13,7 +11,6 @@ def _tool(handler):
     return ToolSpec("lookup", "busca", {"type": "object"}, handler)
 
 
-@pytest.mark.asyncio
 async def test_concludes_and_footer_lists_what_really_ran():
     async def lookup(q):
         return {"hit": q}
@@ -24,7 +21,6 @@ async def test_concludes_and_footer_lists_what_really_ran():
     assert "[executado de fato: lookup]" in r.final_text
 
 
-@pytest.mark.asyncio
 async def test_model_claim_is_not_trusted_when_tool_failed():
     async def lookup(q):
         raise ValueError("fora da janela")
@@ -35,7 +31,6 @@ async def test_model_claim_is_not_trusted_when_tool_failed():
     assert r.errors and "fora da janela" in r.errors[0]
 
 
-@pytest.mark.asyncio
 async def test_repeated_call_does_not_reexecute():
     runs = []
 
@@ -48,7 +43,6 @@ async def test_repeated_call_does_not_reexecute():
     assert runs == ["a"]
 
 
-@pytest.mark.asyncio
 async def test_last_turn_has_no_tools_so_model_must_conclude():
     async def lookup(q):
         return "ok"
@@ -59,14 +53,12 @@ async def test_last_turn_has_no_tools_so_model_must_conclude():
     assert r.iterations == 3
 
 
-@pytest.mark.asyncio
 async def test_budget_stops_before_calling_model():
     model = ScriptedChatModel([AgentMessage("assistant", "x")])
     r = await run_agent(model, "sys", "go", [], budget=TokenBudget(0))
     assert r.stopped_by == "budget" and model.calls == []
 
 
-@pytest.mark.asyncio
 async def test_tool_result_is_capped():
     async def lookup(q):
         return "x" * 10_000

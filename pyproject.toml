@@ -46,4 +46,3 @@ omit = ["*/main.py", "*/chroma_store.py"]  # composição e adaptador opcional
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=aiplatform --cov-report=term-missing:skip-covered --cov-fail-under=85"

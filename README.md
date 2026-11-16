@@ -8,7 +8,8 @@ Destila padrões que aprendi construindo o [Caleryn](https://caleryn.com), um Sa
 
 ```bash
 pip install -e ".[dev]"
-pytest                      # 13 testes, cobertura mínima 85%
+pytest                      # testes
+pytest --cov=aiplatform --cov-report=term-missing:skip-covered --cov-fail-under=85  # como no CI
 uvicorn aiplatform.main:app # sem OPENAI_API_KEY usa adaptadores locais
 ```
 

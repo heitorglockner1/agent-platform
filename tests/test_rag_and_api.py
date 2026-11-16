@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 
 from aiplatform.application.rag import NO_CONTEXT_REPLY, AnswerQuestion, IndexDocument, chunk_text
@@ -27,7 +26,6 @@ def _stack():
     )
 
 
-@pytest.mark.asyncio
 async def test_answer_has_citations_from_retrieval():
     _, _, _, index, ask = _stack()
     index(Document("d1", "O prazo de reembolso é de sete dias corridos.", "politica.md"))
@@ -36,7 +34,6 @@ async def test_answer_has_citations_from_retrieval():
     assert a.grounded and a.citations[0].source == "politica.md"
 
 
-@pytest.mark.asyncio
 async def test_refuses_instead_of_inventing_when_nothing_relevant():
     _, _, _, index, ask = _stack()
     index(Document("d1", "O prazo de reembolso é de sete dias.", "politica.md"))

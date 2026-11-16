@@ -30,7 +30,6 @@ async def _noop(**_):
     return None
 
 
-@pytest.mark.asyncio
 async def test_tools_become_tool_calls():
     stub = StubChat()
     spec = ToolSpec("lookup", "busca", {"type": "object"}, _noop)
@@ -39,7 +38,6 @@ async def test_tools_become_tool_calls():
     assert reply.tool_calls[0].arguments == {"q": "x"}
 
 
-@pytest.mark.asyncio
 async def test_empty_tools_does_not_bind():
     stub = StubChat()
     await LangChainChatModel(stub).complete([AgentMessage("user", "oi")], [])
