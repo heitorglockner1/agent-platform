@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any
 
-from aiplatform.domain.models import AgentMessage, Chunk, ScoredChunk, ToolSpec
+from aiplatform.domain.models import AgentMessage, Chunk, ScoredChunk, TenantId, ToolSpec
 
 
 class ProviderUnavailableError(Exception):
@@ -37,19 +37,26 @@ class EmbedderPort(ABC):
 
 
 class VectorStorePort(ABC):
-    """Banco vetorial. A similaridade devolvida vai de 0 a 1 (1 é idêntico)."""
+    """Banco vetorial isolado por cliente. A similaridade vai de 0 a 1 (1 é idêntico).
+
+    `tenant` é obrigatório em todo método, e não um filtro opcional: assim não
+    existe chamada que esqueça o cliente. Um cliente nunca lê, sobrescreve nem
+    apaga trechos de outro, mesmo com o mesmo id de documento.
+    """
 
     @abstractmethod
-    async def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[list[float]]) -> None:
-        """Grava ou substitui cada trecho pelo seu `Chunk.id`."""
+    async def upsert(
+        self, tenant: TenantId, chunks: Sequence[Chunk], vectors: Sequence[list[float]]
+    ) -> None:
+        """Grava ou substitui cada trecho do cliente pelo seu `Chunk.id`."""
 
     @abstractmethod
-    async def search(self, vector: list[float], top_k: int) -> list[ScoredChunk]:
-        """Os `top_k` trechos mais parecidos, do mais para o menos parecido."""
+    async def search(self, tenant: TenantId, vector: list[float], top_k: int) -> list[ScoredChunk]:
+        """Os `top_k` trechos do cliente mais parecidos, do mais para o menos parecido."""
 
     @abstractmethod
-    async def delete_document(self, document_id: str) -> None:
-        """Remove todos os trechos do documento."""
+    async def delete_document(self, tenant: TenantId, document_id: str) -> None:
+        """Remove todos os trechos do documento do cliente."""
 
 
 class EventPublisherPort(ABC):

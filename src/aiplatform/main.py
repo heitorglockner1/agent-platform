@@ -63,6 +63,7 @@ def build_app(settings: Settings) -> FastAPI:
         min_score=settings.rag_min_score,
         agent_limits=AgentLimits(settings.agent_max_iterations, settings.agent_max_tokens),
         tracer=LoggingTracer(),
+        api_keys=dict(settings.api_keys),
     )
 
 

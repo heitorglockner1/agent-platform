@@ -8,7 +8,7 @@ from aiplatform.application.rag import (
     Retriever,
     chunk_text,
 )
-from aiplatform.domain.models import Document
+from aiplatform.domain.models import Document, TenantId
 from aiplatform.infrastructure.demo import DemoChatModel
 from aiplatform.infrastructure.local import HashingEmbedder, InMemoryEventBus, InMemoryVectorStore
 from aiplatform.web.app import create_app
@@ -52,6 +52,7 @@ def test_empty_text_has_no_chunks():
     assert chunk_text("   ") == []
 
 
+TENANT = TenantId("acme")
 POLICY = "O prazo de reembolso é de sete dias corridos."
 
 
@@ -62,12 +63,18 @@ class Stack:
         self.store = InMemoryVectorStore()
         self.bus = InMemoryEventBus()
         self.embedder = HashingEmbedder()
-        self.index = IndexDocument(self.embedder, self.store, self.bus)
-        self.ask = AnswerQuestion(DemoChatModel(), Retriever(self.embedder, self.store))
+        self._index = IndexDocument(self.embedder, self.store, self.bus)
+        self._ask = AnswerQuestion(DemoChatModel(), Retriever(self.embedder, self.store))
+
+    async def index(self, doc):
+        return await self._index(TENANT, doc)
+
+    async def ask(self, question):
+        return await self._ask(TENANT, question)
 
     async def texts_near(self, query):
         [vector] = await self.embedder.embed([query])
-        return [hit.chunk.text for hit in await self.store.search(vector, 10)]
+        return [hit.chunk.text for hit in await self.store.search(TENANT, vector, 10)]
 
 
 async def test_answer_has_citations_from_retrieval():
@@ -110,9 +117,8 @@ async def test_reindex_keeps_old_version_when_embedding_fails():
     stack = Stack()
     await stack.index(Document("d1", "alfa beta gama", "a"))
     with pytest.raises(RuntimeError):
-        await IndexDocument(FailingEmbedder(), stack.store, stack.bus)(
-            Document("d1", "versão nova", "a")
-        )
+        failing = IndexDocument(FailingEmbedder(), stack.store, stack.bus)
+        await failing(TENANT, Document("d1", "versão nova", "a"))
     texts = await stack.texts_near("alfa")
     assert texts == ["alfa beta gama"]
 

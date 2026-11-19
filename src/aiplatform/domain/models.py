@@ -1,5 +1,6 @@
 """Modelos de domínio: dataclasses puras, sem dependência de framework."""
 
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -7,6 +8,26 @@ from typing import Any, Literal
 Role = Literal["system", "user", "assistant", "tool"]
 StopReason = Literal["concluded", "max_iterations", "budget"]
 ToolHandler = Callable[..., Awaitable[Any]]
+
+_TENANT_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{1,61}[a-z0-9]$")
+
+
+@dataclass(frozen=True)
+class TenantId:
+    """Cliente dono dos dados. Todo acesso a documentos passa por um.
+
+    O formato é restrito porque o id vira parte do nome da coleção no banco
+    vetorial: minúsculas, dígitos, `-` e `_`, de 3 a 63 caracteres.
+    """
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not _TENANT_ID.match(self.value):
+            raise ValueError(f"id de cliente inválido: {self.value!r}")
+
+    def __str__(self) -> str:
+        return self.value
 
 
 @dataclass(frozen=True)

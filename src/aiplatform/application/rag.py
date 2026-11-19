@@ -19,7 +19,15 @@ from aiplatform.application.ports import (
     VectorStorePort,
 )
 from aiplatform.application.prompts import CONTEXT_HEADER, GROUNDING_INSTRUCTION, QUESTION_HEADER
-from aiplatform.domain.models import AgentMessage, Answer, Chunk, Citation, Document, ScoredChunk
+from aiplatform.domain.models import (
+    AgentMessage,
+    Answer,
+    Chunk,
+    Citation,
+    Document,
+    ScoredChunk,
+    TenantId,
+)
 
 NO_CONTEXT_REPLY = "Não encontrei isso nos documentos indexados."
 
@@ -82,18 +90,17 @@ class IndexDocument:
         self._chunk_size = chunk_size
         self._overlap = overlap
 
-    async def __call__(self, doc: Document) -> int:
-        """Indexa (ou reindexa) o documento e devolve quantos trechos ele gerou."""
+    async def __call__(self, tenant: TenantId, doc: Document) -> int:
+        """Indexa (ou reindexa) o documento do cliente e devolve quantos trechos ele gerou."""
         pieces = chunk_text(doc.text, self._chunk_size, self._overlap)
         chunks = [Chunk(doc.id, i, t, doc.source) for i, t in enumerate(pieces)]
         # Embeddings antes de apagar: se o provedor falhar, a versão antiga continua.
         vectors = await self._embedder.embed([c.text for c in chunks]) if chunks else []
-        await self._store.delete_document(doc.id)
+        await self._store.delete_document(tenant, doc.id)
         if chunks:
-            await self._store.upsert(chunks, vectors)
-        await self._events.publish(
-            "document.indexed", {"document_id": doc.id, "chunks": len(chunks)}
-        )
+            await self._store.upsert(tenant, chunks, vectors)
+        event = {"tenant": str(tenant), "document_id": doc.id, "chunks": len(chunks)}
+        await self._events.publish("document.indexed", event)
         return len(chunks)
 
 
@@ -114,15 +121,15 @@ class Retriever:
         self._min_score = min_score
         self._tracer = tracer
 
-    async def __call__(self, query: str) -> list[ScoredChunk]:
-        """Trechos relevantes para `query`, do mais para o menos parecido."""
+    async def __call__(self, tenant: TenantId, query: str) -> list[ScoredChunk]:
+        """Trechos do cliente relevantes para `query`, do mais para o menos parecido."""
         [vector] = await self._embedder.embed([query])
-        found = await self._store.search(vector, self._top_k)
+        found = await self._store.search(tenant, vector, self._top_k)
         hits = [h for h in found if h.score >= self._min_score]
         if self._tracer:
             # top_score antes do limiar: é o número que serve para calibrá-lo.
             top = round(found[0].score, 4) if found else None
-            self._tracer.event("rag.retrieval", hits=len(hits), top_score=top)
+            self._tracer.event("rag.retrieval", tenant=str(tenant), hits=len(hits), top_score=top)
         return hits
 
 
@@ -133,8 +140,8 @@ class AnswerQuestion:
         self._model = model
         self._retrieve = retrieve
 
-    async def __call__(self, question: str) -> Answer:
-        hits = await self._retrieve(question)
+    async def __call__(self, tenant: TenantId, question: str) -> Answer:
+        hits = await self._retrieve(tenant, question)
         if not hits:
             return Answer(NO_CONTEXT_REPLY, (), grounded=False)  # o modelo nem é chamado
 

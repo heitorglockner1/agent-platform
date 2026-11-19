@@ -26,7 +26,9 @@ def test_agent_searches_then_answers_with_the_document():
     assert body["answer"].startswith(POLICY)
     assert "[executado de fato: search_documents]" in body["answer"]
     assert body["stopped_by"] == "concluded" and body["iterations"] == 2
-    assert 'agent_runs_total{stopped_by="concluded"} 1.0' in client.get("/metrics").text
+    metrics = client.get("/metrics").text
+    assert 'agent_runs_total{stopped_by="concluded",tenant="default"} 1.0' in metrics
+    assert 'agent_tokens_total{tenant="default"}' in metrics
 
 
 def test_agent_says_it_found_nothing_without_documents():

@@ -61,6 +61,22 @@ Lida só em `settings.py`; valor inválido derruba a inicialização com o nome 
 | `RAG_MIN_SCORE` | `0.2` | limiar de similaridade; abaixo dele a resposta é "não encontrei" |
 | `AGENT_MAX_ITERATIONS` | `4` | voltas do agente |
 | `AGENT_MAX_TOKENS` | `20000` | orçamento de tokens por execução do agente |
+| `API_KEYS` | ausente | `chave1:cliente-a,chave2:cliente-b`; ausente: modo aberto, tudo no cliente `default` |
+
+### Isolamento por cliente
+
+Cada API key pertence a um cliente, e o cliente sai da chave (`Authorization: Bearer <chave>`), nunca do corpo da requisição. Os exemplos acima rodam sem chave porque, sem `API_KEYS`, a API fica em modo aberto e tudo pertence ao cliente `default`; o servidor avisa isso no log ao subir.
+
+```bash
+API_KEYS=chave-acme:acme,chave-globex:globex uvicorn aiplatform.main:app
+curl -X POST localhost:8000/ask -H 'authorization: Bearer chave-acme' \
+  -H 'content-type: application/json' -d '{"question":"qual o prazo de reembolso?"}'
+```
+
+- **Na porta, não num filtro:** todo método de `VectorStorePort` exige o cliente. Não existe chamada que o esqueça.
+- **Separação física:** o Chroma usa uma coleção por cliente e o store em memória, um dicionário por cliente. Um bug de filtro não tem como vazar dados.
+- **Agente preso ao cliente:** a ferramenta de busca é montada a cada execução já com o cliente; o modelo não escolhe de quem busca.
+- **Custo por cliente:** `agent_runs_total` e `agent_tokens_total` têm o rótulo `tenant`. Serve para dezenas de clientes; para milhares, o custo por cliente vai para log ou trace, por causa da cardinalidade do Prometheus.
 
 ### Docker
 
@@ -74,9 +90,9 @@ docker run -p 8000:8000 agent-platform
 
 ```
 domain/          dataclasses puras (Document, Chunk, Answer, ToolSpec, AgentMessage...)
-application/     ports.py (interfaces), rag.py, agent_loop.py, agentic_rag.py, budget.py
+application/     ports.py (interfaces), rag.py, agent_loop.py, agentic_rag.py, budget.py, prompts.py
 infrastructure/  adaptadores: local (memória), demo, Chroma, LangChain (chat e embeddings)
-web/             FastAPI: app (montagem), routes, schemas, middleware, metrics
+web/             FastAPI: app (montagem), routes, schemas, auth, middleware, metrics
 settings.py      configuração do ambiente
 observability.py log JSON e tracer
 main.py          composição: escolhe os adaptadores a partir de Settings
@@ -98,6 +114,9 @@ Dependências apontam para dentro: `application` nunca importa `infrastructure`.
 | Reindexar substitui a versão antiga, sem perdê-la se o embedder falhar | `rag.py` | `test_reindex_keeps_old_version_when_embedding_fails` |
 | Chunking com sobreposição limitada, sem trecho redundante | `rag.py` | `test_every_chunk_adds_new_words_and_rebuilds_the_text` |
 | Mesmo contrato para todo banco vetorial | `infrastructure/local.py`, `chroma_store.py` | `test_vector_store_contract.py` |
+| Cliente obrigatório na porta; separação física por cliente | `application/ports.py`, `local.py`, `chroma_store.py` | `test_tenant_never_sees_another_tenants_chunks` |
+| Cliente vem da API key, nunca do corpo | `web/auth.py` | `test_tenancy.py` |
+| Todo texto enviado ao modelo num lugar só, com o motivo | `application/prompts.py` | |
 | Qualquer provedor LangChain, inclusive conteúdo em blocos | `infrastructure/langchain_chat.py` | `test_langchain_adapter.py` |
 | Falha ou timeout do provedor vira 502; erro inesperado vira 500 contado | `web/app.py` | `test_api_errors.py` |
 | Validação de entrada e schema de resposta no OpenAPI | `web/app.py` | `test_openapi_describes_the_ask_response` |
@@ -113,7 +132,8 @@ Transparência vale mais que checklist inflado:
 - **AWS:** nenhum deploy aqui. No Caleryn o deploy roda em Fly.io com Docker e CI; os adaptadores de nuvem (Bedrock, SQS, OpenSearch) são o próximo passo natural e cabem nas portas existentes.
 - **MongoDB e brokers (Kafka, RabbitMQ, SQS):** só existe a porta e um barramento em memória.
 - **Migração monolito para microsserviços:** o Caleryn é um monolito modular com worker separado; não há microsserviços aqui.
-- **Autenticação e isolamento por cliente:** não há.
+- **Identidade real:** a autenticação é por API key fixa na configuração; não há OAuth, rotação de chave nem cadastro de clientes.
+- **Cotas por cliente:** o orçamento de tokens vale por execução do agente, não há teto diário ou mensal por cliente.
 - **Persistência:** o store padrão é em memória e perde os dados ao reiniciar; use `VECTOR_STORE=chroma` com `CHROMA_PATH`.
 - **Chunking estrutural:** o corte é por palavras e descarta quebras de linha, então tabelas e código perdem a estrutura.
 - **Calibração:** `RAG_MIN_SCORE` foi calibrado para o embedder por hashing e precisa ser recalibrado ao trocar de embedder.

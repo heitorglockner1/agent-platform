@@ -24,8 +24,19 @@ class ApiMetrics:
         self._latency = Histogram(
             "http_request_seconds", "Latência", ["path"], registry=self._registry
         )
+        # Rótulo por cliente dá custo por cliente, mas cada cliente é uma série nova:
+        # serve para dezenas de clientes, não para milhares (aí vai para o log/trace).
         self._agent_runs = Counter(
-            "agent_runs_total", "Execuções do agente", ["stopped_by"], registry=self._registry
+            "agent_runs_total",
+            "Execuções do agente",
+            ["tenant", "stopped_by"],
+            registry=self._registry,
+        )
+        self._agent_tokens = Counter(
+            "agent_tokens_total",
+            "Tokens consumidos pelo agente",
+            ["tenant"],
+            registry=self._registry,
         )
 
     def observe_request(self, path: str, status: int, seconds: float) -> None:
@@ -33,8 +44,9 @@ class ApiMetrics:
         self._latency.labels(path).observe(seconds)
         self._requests.labels(path, str(status)).inc()
 
-    def count_agent_run(self, stopped_by: str) -> None:
-        self._agent_runs.labels(stopped_by).inc()
+    def count_agent_run(self, tenant: str, stopped_by: str, tokens: int) -> None:
+        self._agent_runs.labels(tenant, stopped_by).inc()
+        self._agent_tokens.labels(tenant).inc(tokens)
 
     def render(self) -> bytes:
         """Texto no formato de exposição do Prometheus, para a rota /metrics."""

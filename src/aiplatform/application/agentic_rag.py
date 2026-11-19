@@ -1,6 +1,7 @@
 """RAG com agente: o modelo decide o que buscar, o loop impõe os tetos."""
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from aiplatform.application.agent_loop import run_agent
@@ -13,7 +14,7 @@ from aiplatform.application.prompts import (
     SEARCH_TOOL_SCHEMA,
 )
 from aiplatform.application.rag import Retriever
-from aiplatform.domain.models import AgentResult, ToolSpec
+from aiplatform.domain.models import AgentResult, TenantId, ToolSpec
 
 
 @dataclass(frozen=True)
@@ -42,14 +43,25 @@ class AnswerWithAgent:
         self._retrieve = retrieve
         self._limits = limits
         self._tracer = tracer
-        self._search = ToolSpec(
-            SEARCH_TOOL_NAME,
-            SEARCH_TOOL_DESCRIPTION,
-            SEARCH_TOOL_SCHEMA,
-            self._search_documents,
+
+    async def __call__(self, tenant: TenantId, task: str) -> AgentResult:
+        return await run_agent(
+            self._model,
+            AGENT_SYSTEM_PROMPT,
+            task,
+            [self._search_tool(tenant)],
+            max_iterations=self._limits.max_iterations,
+            tool_result_cap=self._limits.tool_result_cap,
+            budget=TokenBudget(self._limits.max_tokens),  # novo a cada execução
+            tracer=self._tracer,
         )
 
-    async def _search_documents(self, query: str) -> list[dict[str, Any]]:
+    def _search_tool(self, tenant: TenantId) -> ToolSpec:
+        """Ferramenta presa ao cliente da execução: o modelo não escolhe de quem busca."""
+        handler = partial(self._search_documents, tenant)
+        return ToolSpec(SEARCH_TOOL_NAME, SEARCH_TOOL_DESCRIPTION, SEARCH_TOOL_SCHEMA, handler)
+
+    async def _search_documents(self, tenant: TenantId, query: str) -> list[dict[str, Any]]:
         """Handler da ferramenta: lista vazia quando nada passa do limiar."""
         return [
             {
@@ -58,17 +70,5 @@ class AnswerWithAgent:
                 "text": h.chunk.text,
                 "score": round(h.score, 4),
             }
-            for h in await self._retrieve(query)
+            for h in await self._retrieve(tenant, query)
         ]
-
-    async def __call__(self, task: str) -> AgentResult:
-        return await run_agent(
-            self._model,
-            AGENT_SYSTEM_PROMPT,
-            task,
-            [self._search],
-            max_iterations=self._limits.max_iterations,
-            tool_result_cap=self._limits.tool_result_cap,
-            budget=TokenBudget(self._limits.max_tokens),  # novo a cada execução
-            tracer=self._tracer,
-        )

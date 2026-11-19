@@ -5,6 +5,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal, TypeVar, cast, get_args
 
+from aiplatform.domain.models import TenantId
+
 LlmKind = Literal["demo", "openai"]
 VectorStoreKind = Literal["memory", "chroma"]
 EmbeddingsKind = Literal["hashing", "openai"]
@@ -31,6 +33,21 @@ def _number(environ: Mapping[str, str], name: str, parse: Callable[[str], _N], d
         raise ValueError(f"{name}={raw!r} inválido; esperado um número") from None
 
 
+def _api_keys(environ: Mapping[str, str]) -> tuple[tuple[str, TenantId], ...]:
+    """`API_KEYS=chave1:cliente-a,chave2:cliente-b`. Ausente: modo aberto (demo)."""
+    pairs = []
+    for item in filter(None, (part.strip() for part in environ.get("API_KEYS", "").split(","))):
+        key, _, tenant = item.partition(":")
+        try:
+            pairs.append((key, TenantId(tenant)))
+        except ValueError:
+            # A mensagem não repete o item: ele contém a chave, que é segredo.
+            raise ValueError("API_KEYS inválido; formato: chave:cliente,chave:cliente") from None
+        if not key:
+            raise ValueError("API_KEYS inválido; formato: chave:cliente,chave:cliente")
+    return tuple(pairs)
+
+
 @dataclass(frozen=True)
 class Settings:
     """Toda a configuração da aplicação. Os padrões rodam sem chave e sem rede."""
@@ -46,6 +63,7 @@ class Settings:
     rag_min_score: float = 0.2
     agent_max_iterations: int = 4
     agent_max_tokens: int = 20_000
+    api_keys: tuple[tuple[str, TenantId], ...] = ()
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Settings":
@@ -65,4 +83,5 @@ class Settings:
                 environ, "AGENT_MAX_ITERATIONS", int, cls.agent_max_iterations
             ),
             agent_max_tokens=_number(environ, "AGENT_MAX_TOKENS", int, cls.agent_max_tokens),
+            api_keys=_api_keys(environ),
         )
