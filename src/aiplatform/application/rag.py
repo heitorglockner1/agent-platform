@@ -18,12 +18,10 @@ from aiplatform.application.ports import (
     Tracer,
     VectorStorePort,
 )
+from aiplatform.application.prompts import CONTEXT_HEADER, GROUNDING_INSTRUCTION, QUESTION_HEADER
 from aiplatform.domain.models import AgentMessage, Answer, Chunk, Citation, Document, ScoredChunk
 
-CONTEXT_HEADER = "CONTEXTO:"
-QUESTION_HEADER = "PERGUNTA:"
 NO_CONTEXT_REPLY = "Não encontrei isso nos documentos indexados."
-GROUNDING_INSTRUCTION = "Responda só com base no CONTEXTO. Se não estiver nele, diga que não sabe."
 
 
 def _tail(words: list[str], overlap: int) -> list[str]:

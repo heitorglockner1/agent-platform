@@ -8,7 +8,8 @@ import re
 from collections.abc import Sequence
 
 from aiplatform.application.ports import ChatModelPort
-from aiplatform.application.rag import CONTEXT_HEADER, NO_CONTEXT_REPLY, QUESTION_HEADER
+from aiplatform.application.prompts import CONTEXT_HEADER, QUESTION_HEADER
+from aiplatform.application.rag import NO_CONTEXT_REPLY
 from aiplatform.domain.models import AgentMessage, ToolCall, ToolSpec
 
 

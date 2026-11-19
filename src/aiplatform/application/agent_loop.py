@@ -29,10 +29,10 @@ import time
 from collections.abc import Sequence
 
 from aiplatform.application.ports import BudgetPort, ChatModelPort, Tracer
+from aiplatform.application.prompts import REPEATED_CALL_REPLY
 from aiplatform.domain.models import AgentMessage, AgentResult, StopReason, ToolCall, ToolSpec
 
 NO_CONCLUSION_REPLY = "Não foi possível concluir dentro dos limites definidos."
-REPEATED_CALL_REPLY = "Chamada repetida: o resultado já está acima. Conclua com o que tem."
 
 
 async def run_agent(

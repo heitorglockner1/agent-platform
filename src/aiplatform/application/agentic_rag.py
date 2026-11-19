@@ -6,22 +6,14 @@ from typing import Any
 from aiplatform.application.agent_loop import run_agent
 from aiplatform.application.budget import TokenBudget
 from aiplatform.application.ports import ChatModelPort, Tracer
+from aiplatform.application.prompts import (
+    AGENT_SYSTEM_PROMPT,
+    SEARCH_TOOL_DESCRIPTION,
+    SEARCH_TOOL_NAME,
+    SEARCH_TOOL_SCHEMA,
+)
 from aiplatform.application.rag import Retriever
 from aiplatform.domain.models import AgentResult, ToolSpec
-
-SYSTEM_PROMPT = (
-    "Você responde perguntas usando a ferramenta search_documents. Busque antes de "
-    "responder. Se a busca não trouxer nada relevante, diga que não encontrou. Não invente."
-)
-
-SEARCH_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "query": {"type": "string", "description": "Termos a buscar nos documentos indexados."}
-    },
-    "required": ["query"],
-    "additionalProperties": False,
-}
 
 
 @dataclass(frozen=True)
@@ -51,9 +43,9 @@ class AnswerWithAgent:
         self._limits = limits
         self._tracer = tracer
         self._search = ToolSpec(
-            "search_documents",
-            "Busca trechos relevantes nos documentos indexados.",
-            SEARCH_SCHEMA,
+            SEARCH_TOOL_NAME,
+            SEARCH_TOOL_DESCRIPTION,
+            SEARCH_TOOL_SCHEMA,
             self._search_documents,
         )
 
@@ -72,7 +64,7 @@ class AnswerWithAgent:
     async def __call__(self, task: str) -> AgentResult:
         return await run_agent(
             self._model,
-            SYSTEM_PROMPT,
+            AGENT_SYSTEM_PROMPT,
             task,
             [self._search],
             max_iterations=self._limits.max_iterations,
